@@ -88,7 +88,7 @@ function statusLabel(s: QueueItemStatus): string {
 function Spinner({ size = 14 }: { size?: number }) {
   return (
     <span
-      className="inline-block rounded-full border-[1.5px] border-line-strong border-t-brand animate-spin flex-shrink-0"
+      className="inline-block rounded-full border-[1.5px] border-line-strong border-t-brand animate-spin shrink-0"
       style={{ width: size, height: size }}
     />
   );
@@ -98,7 +98,7 @@ function ItemIcon({ url, title }: { url: string | null; title: string }) {
   const [errored, setErrored] = useState(false);
   if (!url || errored) {
     return (
-      <div className="w-10 h-10 rounded-lg bg-bg-surface border border-line-subtle flex items-center justify-center text-lg text-ink-muted flex-shrink-0 select-none">
+      <div className="w-10 h-10 rounded-lg bg-bg-surface border border-line-subtle flex items-center justify-center text-lg text-ink-muted shrink-0 select-none">
         ⬡
       </div>
     );
@@ -109,13 +109,13 @@ function ItemIcon({ url, title }: { url: string | null; title: string }) {
       src={url}
       alt={title}
       onError={() => setErrored(true)}
-      className="w-10 h-10 rounded-lg border border-line-subtle object-cover flex-shrink-0 bg-bg-surface"
+      className="w-10 h-10 rounded-lg border border-line-subtle object-cover shrink-0 bg-bg-surface"
     />
   );
 }
 
 function QueueStatusDot({ status }: { status: QueueItemStatus }) {
-  const base = 'w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-300';
+  const base = 'w-2 h-2 rounded-full shrink-0 transition-colors duration-300';
   if (status === 'done')        return <span className={`${base} bg-brand`} />;
   if (status === 'downloading') return <span className={`${base} bg-amber-pulse animate-pulse`} />;
   if (status === 'error')       return <span className={`${base} bg-red-err`} />;
@@ -354,10 +354,10 @@ export default function Page() {
     <div className="flex flex-col bg-bg-base text-ink-primary overflow-hidden select-none" style={{ height: '100dvh' }}>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
-      <header className="border-b border-line-subtle flex-shrink-0">
+      <header className="border-b border-line-subtle shrink-0">
         <div className="flex items-center gap-6 px-5 py-2.5">
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-md bg-brand flex items-center justify-center flex-shrink-0">
+            <div className="w-6 h-6 rounded-md bg-brand flex items-center justify-center shrink-0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="#0a2e18">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-4h2V8h-2v8zm-3 0h2V8H8v8zm6 0h2V8h-2v8z"/>
               </svg>
@@ -390,7 +390,7 @@ export default function Page() {
         <div className={`${mobilePanel === 'queue' ? 'hidden' : 'flex'} md:flex flex-1 flex-col border-r border-line-subtle overflow-hidden min-w-0`}>
 
           {/* Version + loader row */}
-          <div className="flex items-center gap-3 px-5 py-2 border-b border-line-subtle flex-shrink-0 flex-wrap">
+          <div className="flex items-center gap-3 px-5 py-2 border-b border-line-subtle shrink-0 flex-wrap">
 
             {/* API source */}
             <CustomSelect
@@ -465,7 +465,7 @@ export default function Page() {
               <button
                 onClick={triggerSearch}
                 disabled={isLoading}
-                className="h-7 w-7 rounded-md bg-brand border border-brand text-brand-dark flex items-center justify-center flex-shrink-0 transition-all hover:bg-brand-hover active:scale-95 disabled:opacity-50"
+                className="h-7 w-7 rounded-md bg-brand border border-brand text-brand-dark flex items-center justify-center shrink-0 transition-all hover:bg-brand-hover active:scale-95 disabled:opacity-50"
               >
                 {isLoading
                   ? <Spinner size={11} />
@@ -570,7 +570,7 @@ export default function Page() {
                         disabled={queued}
                         onClick={() => { queue.add(item.project_id, item.title, item.icon_url, filters); setMobilePanel('queue'); }}
                         className={[
-                          'w-8 h-8 rounded-lg text-xs flex items-center justify-center flex-shrink-0 transition-all duration-150',
+                          'w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150',
                           queued && !isActive
                             ? 'bg-brand-glow text-brand cursor-default'
                             : isActive
@@ -607,10 +607,10 @@ export default function Page() {
         </div>
 
         {/* ── Right panel (queue) ─────────────────────────────────────────── */}
-        <div className={`${mobilePanel === 'search' ? 'hidden' : 'flex'} md:flex w-full md:w-[290px] flex-col flex-shrink-0`}>
+        <div className={`${mobilePanel === 'search' ? 'hidden' : 'flex'} md:flex w-full md:w-[290px] flex-col shrink-0`}>
 
           {/* Queue header */}
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-line-subtle flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-line-subtle shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-[13px] font-semibold">Fila de download</span>
               <span className="min-w-[20px] h-5 px-1.5 bg-brand text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center font-mono">
@@ -654,7 +654,7 @@ export default function Page() {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-[12px] font-medium truncate">{entry.title}</span>
                         {entry.isDependency && (
-                          <span className="text-[9px] px-1 py-0.5 rounded bg-line-subtle text-ink-tertiary border border-line-DEFAULT flex-shrink-0">
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-line-subtle text-ink-tertiary border border-line shrink-0">
                             dep
                           </span>
                         )}
@@ -692,7 +692,7 @@ export default function Page() {
 
                     {/* Actions */}
                     {!queue.isDownloading && (
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {isError && (
                           <button
                             onClick={() => queue.retry(entry.id)}
@@ -718,7 +718,7 @@ export default function Page() {
           </div>
 
           {/* Download footer */}
-          <div className="px-4 py-3.5 border-t border-line-subtle flex-shrink-0">
+          <div className="px-4 py-3.5 border-t border-line-subtle shrink-0">
             <button
               onClick={() => queue.downloadZip(zipName)}
               disabled={queue.readyCount === 0 || queue.isDownloading}
@@ -774,7 +774,7 @@ export default function Page() {
       </div>
 
       {/* ── Mobile bottom nav ────────────────────────────────────────────── */}
-      <nav className="md:hidden flex-shrink-0 flex border-t border-line-subtle bg-bg-base">
+      <nav className="md:hidden shrink-0 flex border-t border-line-subtle bg-bg-base">
         <button
           onClick={() => setMobilePanel('search')}
           className={`flex-1 py-3.5 text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
