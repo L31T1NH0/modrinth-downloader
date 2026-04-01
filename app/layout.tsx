@@ -15,8 +15,8 @@ const jbMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Modrinth Downloader',
-  description: 'Search and download Minecraft mods from Modrinth',
+  title: 'Dynrinth',
+  description: 'Easy search and download Minecraft mods from Modrinth & CurseForge',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
