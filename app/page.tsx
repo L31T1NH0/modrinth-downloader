@@ -1,56 +1,26 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, KeyboardEvent } from 'react';
+import {
+  fetchGameVersions,
+  searchProjects,
+  PAGE_SIZE,
+} from '@/lib/modrinth/service';
+import type {
+  Filters,
+  Loader,
+  ShaderLoader,
+  PluginLoader,
+  ContentType,
+  SearchResult,
+} from '@/lib/modrinth/types';
+import { useQueue, type QueueItemStatus } from '@/hooks/useQueue';
 
-const API = 'https://api.modrinth.com/v2';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type Loader = 'fabric' | 'forge';
-type ShaderLoader = 'iris' | 'optifine';
-type ContentType = 'mod' | 'plugin' | 'datapack' | 'resourcepack' | 'shader';
-type DlStatus = 'pending' | 'downloading' | 'done' | 'error';
-type AddStatus = 'loading' | 'done' | 'error';
-
-interface ModResult {
-  project_id: string;
-  title: string;
-  description: string;
-  icon_url: string | null;
-  downloads: number;
-  categories: string[];
-}
-
-interface ModFile {
-  url: string;
-  filename: string;
-  primary: boolean;
-  size: number;
-}
-
-interface QueueItem {
-  id: string;
-  title: string;
-  iconUrl: string | null;
-  file: ModFile;
-  versionName: string;
-  sizeKb: number | null;
-  contentType: ContentType;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── UI configuration ─────────────────────────────────────────────────────────
 
 const LOADERS: { id: Loader; label: string }[] = [
   { id: 'fabric', label: 'Fabric' },
-  { id: 'forge', label: 'Forge' },
-];
-
-const CONTENT_TYPES: { id: ContentType; label: string; usesLoader: boolean }[] = [
-  { id: 'mod',         label: 'Mods',          usesLoader: true  },
-  { id: 'plugin',      label: 'Plugins',       usesLoader: false },
-  { id: 'datapack',    label: 'Datapacks',     usesLoader: false },
-  { id: 'resourcepack',label: 'Resourcepacks', usesLoader: false },
-  { id: 'shader',      label: 'Shaders',       usesLoader: false },
+  { id: 'forge',  label: 'Forge'  },
 ];
 
 const SHADER_LOADERS: { id: ShaderLoader; label: string }[] = [
@@ -58,34 +28,57 @@ const SHADER_LOADERS: { id: ShaderLoader; label: string }[] = [
   { id: 'optifine', label: 'OptiFine' },
 ];
 
-const PAGE_SIZE = 20;
+const PLUGIN_LOADERS: { id: PluginLoader; label: string }[] = [
+  { id: 'paper',  label: 'Paper'  },
+  { id: 'spigot', label: 'Spigot' },
+  { id: 'bukkit', label: 'Bukkit' },
+];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const CONTENT_TYPES: { id: ContentType; label: string; usesLoader: boolean }[] = [
+  { id: 'mod',          label: 'Mods',          usesLoader: true  },
+  { id: 'plugin',       label: 'Plugins',       usesLoader: false },
+  { id: 'datapack',     label: 'Datapacks',     usesLoader: false },
+  { id: 'resourcepack', label: 'Resourcepacks', usesLoader: false },
+  { id: 'shader',       label: 'Shaders',       usesLoader: false },
+];
+
+const DEFAULT_FILTERS: Filters = {
+  version:      '',
+  contentType:  'mod',
+  loader:       'fabric',
+  shaderLoader: null,
+  pluginLoader: null,
+};
+
+// ─── Display helpers ──────────────────────────────────────────────────────────
 
 function fmtDownloads(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return Math.round(n / 1_000) + 'K';
+  if (n >= 1_000)     return Math.round(n / 1_000) + 'K';
   return String(n);
 }
 
 function fmtSize(kb: number): string {
-  if (kb >= 1024) return (kb / 1024).toFixed(1) + ' MB';
-  return kb + ' KB';
+  return kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB';
 }
 
-/** Build Modrinth search facets for the given filters. */
-function buildFacets(type: ContentType, loader: Loader, shaderLoader: ShaderLoader | null, version: string): string[][] {
-  const base: string[][] = [[`project_type:${type}`], [`versions:${version}`]];
-  if (type === 'mod') base.splice(1, 0, [`categories:${loader}`]);
-  if (type === 'shader' && shaderLoader) base.splice(1, 0, [`categories:${shaderLoader}`]);
-  return base;
+function loaderLabel(f: Filters): string {
+  if (f.contentType === 'mod')
+    return LOADERS.find(l => l.id === f.loader)?.label ?? f.loader;
+  if (f.contentType === 'shader' && f.shaderLoader)
+    return SHADER_LOADERS.find(l => l.id === f.shaderLoader)?.label ?? f.shaderLoader;
+  if (f.contentType === 'plugin' && f.pluginLoader)
+    return PLUGIN_LOADERS.find(l => l.id === f.pluginLoader)?.label ?? f.pluginLoader;
+  return '';
 }
 
-/** Build the version-fetch URL for adding to queue. */
-function versionUrl(projectId: string, type: ContentType, loader: Loader, version: string): string {
-  const params = new URLSearchParams({ game_versions: JSON.stringify([version]) });
-  if (type === 'mod') params.set('loaders', JSON.stringify([loader]));
-  return `${API}/project/${projectId}/version?${params}`;
+/** User-facing label for queue item status. */
+function statusLabel(s: QueueItemStatus): string {
+  if (s === 'resolving')   return 'Resolvendo...';
+  if (s === 'pending')     return 'Aguardando...';
+  if (s === 'downloading') return 'Baixando...';
+  if (s === 'done')        return 'Concluído';
+  return '';
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -99,7 +92,7 @@ function Spinner({ size = 14 }: { size?: number }) {
   );
 }
 
-function ModIcon({ url, title }: { url: string | null; title: string }) {
+function ItemIcon({ url, title }: { url: string | null; title: string }) {
   const [errored, setErrored] = useState(false);
   if (!url || errored) {
     return (
@@ -119,71 +112,97 @@ function ModIcon({ url, title }: { url: string | null; title: string }) {
   );
 }
 
-function StatusDot({ status }: { status: DlStatus }) {
+function QueueStatusDot({ status }: { status: QueueItemStatus }) {
   const base = 'w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-300';
   if (status === 'done')        return <span className={`${base} bg-brand`} />;
   if (status === 'downloading') return <span className={`${base} bg-amber-pulse animate-pulse`} />;
   if (status === 'error')       return <span className={`${base} bg-red-err`} />;
+  if (status === 'resolving' || status === 'pending')
+    return <span className={`${base} bg-line-strong animate-pulse`} />;
+  // ready
   return <span className={`${base} bg-line-strong`} />;
+}
+
+// ─── Pill button (shared style for loader toggles) ────────────────────────────
+
+function PillToggle<T extends string>({
+  options,
+  active,
+  onToggle,
+}: {
+  options:  { id: T; label: string }[];
+  active:   T | null;
+  onToggle: (id: T) => void;
+}) {
+  return (
+    <div className="flex gap-1.5">
+      {options.map(o => (
+        <button
+          key={o.id}
+          onClick={() => onToggle(o.id)}
+          className={[
+            'h-7 px-3 rounded-md text-[11px] border transition-all duration-150 font-medium',
+            active === o.id
+              ? 'bg-brand-glow border-brand text-brand'
+              : 'bg-bg-surface border-line-DEFAULT text-ink-secondary hover:border-line-strong hover:text-ink-primary',
+          ].join(' ')}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Page() {
-  // ── Filter state ─────────────────────────────────────────────────────────
-  const [versions, setVersions]         = useState<string[]>([]);
+
+  // ── MC version list ───────────────────────────────────────────────────────
+  const [versions,     setVersions]     = useState<string[]>([]);
   const [versionCount, setVersionCount] = useState<number | null>(null);
   const [versionError, setVersionError] = useState(false);
-  const [selectedVersion, setSelectedVersion]   = useState('');
-  const [selectedLoader, setSelectedLoader]     = useState<Loader>('fabric');
-  const [contentType, setContentType]           = useState<ContentType>('mod');
-  const [shaderLoader, setShaderLoader]         = useState<ShaderLoader | null>(null);
 
-  // ── Search state ─────────────────────────────────────────────────────────
+  // ── Active filters ────────────────────────────────────────────────────────
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+
+  // ── Search state ──────────────────────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState('');
-  const [activeQuery,   setActiveQuery]   = useState('');
   const [isLoading,     setIsLoading]     = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasError,      setHasError]      = useState(false);
-  const [results,       setResults]       = useState<ModResult[]>([]);
+  const [results,       setResults]       = useState<SearchResult[]>([]);
   const [offset,        setOffset]        = useState(0);
   const [hasMore,       setHasMore]       = useState(false);
+  const activeRef = useRef<{ query: string; filters: Filters }>({
+    query: '', filters: DEFAULT_FILTERS,
+  });
+  const abortRef  = useRef<AbortController | null>(null);
 
-  // ── Queue state ───────────────────────────────────────────────────────────
-  const [queue,         setQueue]         = useState<QueueItem[]>([]);
-  const [addStatus,     setAddStatus]     = useState<Record<string, AddStatus>>({});
-  const [dlStatus,      setDlStatus]      = useState<Record<string, DlStatus>>({});
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [progressText,  setProgressText]  = useState('');
-
-  const abortRef = useRef<AbortController | null>(null);
+  // ── Queue ─────────────────────────────────────────────────────────────────
+  const queue = useQueue();
 
   // ── Load MC versions ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetch(`${API}/tag/game_version`)
-      .then(r => r.json())
-      .then((data: Array<{ version: string; version_type: string }>) => {
-        const releases = data.filter(v => v.version_type === 'release').map(v => v.version);
+    fetchGameVersions()
+      .then(releases => {
         setVersions(releases);
         setVersionCount(releases.length);
-        if (releases.length) setSelectedVersion(releases[0]);
+        if (releases.length) setFilters(prev => ({ ...prev, version: releases[0] }));
       })
       .catch(() => setVersionError(true));
   }, []);
 
-  // ── Auto-fetch when filters change ────────────────────────────────────────
+  // ── Core search ───────────────────────────────────────────────────────────
 
-  const fetchResults = useCallback(async (
-    query: string,
-    type: ContentType,
-    loader: Loader,
-    sLoader: ShaderLoader | null,
-    version: string,
+  const runSearch = useCallback(async (
+    query:       string,
+    snapshot:    Filters,
     startOffset: number,
-    append: boolean,
+    append:      boolean,
   ) => {
-    if (!version) return;
+    if (!snapshot.version) return;
 
     if (!append) {
       abortRef.current?.abort();
@@ -191,159 +210,105 @@ export default function Page() {
       abortRef.current = ctrl;
       setIsLoading(true);
       setHasError(false);
-      setActiveQuery(query);
       setOffset(0);
+      activeRef.current = { query, filters: snapshot };
     } else {
       setIsLoadingMore(true);
     }
 
     try {
-      const facets = buildFacets(type, loader, sLoader, version);
-      const params = new URLSearchParams({
-        facets:  JSON.stringify(facets),
-        limit:   String(PAGE_SIZE),
-        offset:  String(startOffset),
-        index:   query ? 'relevance' : 'downloads',
-      });
-      if (query) params.set('query', query);
-
       const signal = append ? undefined : abortRef.current?.signal;
-      const r = await fetch(`${API}/search?${params}`, { signal });
-      const data = await r.json();
-      const hits: ModResult[] = data.hits ?? [];
-      const total: number = data.total_hits ?? 0;
+      const page   = await searchProjects(query, snapshot, startOffset, signal);
 
       if (append) {
-        setResults(prev => [...prev, ...hits]);
-        const newOffset = startOffset + hits.length;
-        setOffset(newOffset);
-        setHasMore(newOffset < total);
+        setResults(prev => [...prev, ...page.hits]);
+        const next = startOffset + page.hits.length;
+        setOffset(next);
+        setHasMore(next < page.totalHits);
       } else {
-        setResults(hits);
-        setOffset(hits.length);
-        setHasMore(hits.length < total);
+        setResults(page.hits);
+        setOffset(page.hits.length);
+        setHasMore(page.hits.length < page.totalHits);
       }
       setHasError(false);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setHasError(true);
     } finally {
       if (append) setIsLoadingMore(false);
-      else setIsLoading(false);
+      else        setIsLoading(false);
     }
   }, []);
 
-  // Re-fetch when version / loader / shaderLoader / contentType changes
+  // Re-fetch on filter change; clears query to show browse mode.
   useEffect(() => {
-    if (!selectedVersion) return;
-    fetchResults(searchQuery, contentType, selectedLoader, shaderLoader, selectedVersion, 0, false);
-    // searchQuery intentionally excluded — only re-fetches on filter change, not every keystroke
+    if (!filters.version) return;
+    setSearchQuery('');
+    runSearch('', filters, 0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedVersion, selectedLoader, shaderLoader, contentType, fetchResults]);
+  }, [filters.version, filters.contentType, filters.loader, filters.shaderLoader, filters.pluginLoader, runSearch]);
 
-  // ── Search (explicit) ─────────────────────────────────────────────────────
+  // ── Search actions ────────────────────────────────────────────────────────
 
   const triggerSearch = useCallback(() => {
-    fetchResults(searchQuery, contentType, selectedLoader, shaderLoader, selectedVersion, 0, false);
-  }, [fetchResults, searchQuery, contentType, selectedLoader, shaderLoader, selectedVersion]);
+    runSearch(searchQuery.trim(), filters, 0, false);
+  }, [runSearch, searchQuery, filters]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') triggerSearch(); },
-    [triggerSearch]
+    [triggerSearch],
   );
 
-  const loadMore = useCallback(() => {
-    fetchResults(searchQuery, contentType, selectedLoader, shaderLoader, selectedVersion, offset, true);
-  }, [fetchResults, searchQuery, contentType, selectedLoader, shaderLoader, selectedVersion, offset]);
-
-  // Clear query and show default list
   const clearSearch = useCallback(() => {
     setSearchQuery('');
-    fetchResults('', contentType, selectedLoader, shaderLoader, selectedVersion, 0, false);
-  }, [fetchResults, contentType, selectedLoader, shaderLoader, selectedVersion]);
+    runSearch('', filters, 0, false);
+  }, [runSearch, filters]);
 
-  // ── Add to queue ──────────────────────────────────────────────────────────
+  const loadMore = useCallback(() => {
+    const { query, filters: f } = activeRef.current;
+    runSearch(query, f, offset, true);
+  }, [runSearch, offset]);
 
-  const addItem = useCallback(
-    async (projectId: string, title: string, iconUrl: string | null, type: ContentType) => {
-      if (addStatus[projectId] || queue.some(q => q.id === projectId)) return;
-      setAddStatus(prev => ({ ...prev, [projectId]: 'loading' }));
-      try {
-        const url = versionUrl(projectId, type, selectedLoader, selectedVersion);
-        const r = await fetch(url);
-        const vers = await r.json();
-        if (!Array.isArray(vers) || !vers.length) {
-          setAddStatus(prev => ({ ...prev, [projectId]: 'error' }));
-          setTimeout(
-            () => setAddStatus(prev => { const n = { ...prev }; delete n[projectId]; return n; }),
-            2000
-          );
-          return;
-        }
-        const latest = vers[0];
-        const file: ModFile = latest.files.find((f: ModFile) => f.primary) ?? latest.files[0];
-        if (!file) { setAddStatus(prev => { const n = { ...prev }; delete n[projectId]; return n; }); return; }
-        const sizeKb = file.size ? Math.round(file.size / 1024) : null;
-        setQueue(prev => [...prev, { id: projectId, title, iconUrl, file, versionName: latest.version_number, sizeKb, contentType: type }]);
-        setAddStatus(prev => ({ ...prev, [projectId]: 'done' }));
-      } catch {
-        setAddStatus(prev => { const n = { ...prev }; delete n[projectId]; return n; });
-      }
-    },
-    [addStatus, queue, selectedLoader, selectedVersion]
+  // ── Filter setters ────────────────────────────────────────────────────────
+
+  const setVersion = useCallback((v: string) => {
+    setFilters(prev => ({ ...prev, version: v }));
+  }, []);
+
+  const setLoader = useCallback((l: Loader) => {
+    setFilters(prev => ({ ...prev, loader: l }));
+  }, []);
+
+  const toggleShaderLoader = useCallback((sl: ShaderLoader) => {
+    setFilters(prev => ({ ...prev, shaderLoader: prev.shaderLoader === sl ? null : sl }));
+  }, []);
+
+  const togglePluginLoader = useCallback((pl: PluginLoader) => {
+    setFilters(prev => ({ ...prev, pluginLoader: prev.pluginLoader === pl ? null : pl }));
+  }, []);
+
+  const setContentType = useCallback((ct: ContentType) => {
+    setFilters(prev => ({
+      ...prev,
+      contentType:  ct,
+      shaderLoader: ct === 'shader' ? prev.shaderLoader : null,
+      pluginLoader: ct === 'plugin' ? prev.pluginLoader : null,
+    }));
+  }, []);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  const currentTypeInfo = CONTENT_TYPES.find(t => t.id === filters.contentType)!;
+
+  /** True when this project is already present in the queue (any status). */
+  const inQueue = useCallback(
+    (id: string) => queue.entries.some(e => e.id === id),
+    [queue.entries],
   );
 
-  const removeFromQueue = useCallback((id: string) => {
-    setQueue(prev => prev.filter(q => q.id !== id));
-    setDlStatus(prev => { const n = { ...prev }; delete n[id]; return n; });
-    setAddStatus(prev => { const n = { ...prev }; delete n[id]; return n; });
-  }, []);
-
-  const clearQueue = useCallback(() => {
-    setQueue([]);
-    setDlStatus({});
-    setAddStatus({});
-    setProgressText('');
-  }, []);
-
-  // ── Download ──────────────────────────────────────────────────────────────
-
-  const downloadAll = useCallback(async () => {
-    if (!queue.length || isDownloading) return;
-    setIsDownloading(true);
-    setProgressText('');
-    let done = 0;
-    for (const item of queue) {
-      setDlStatus(prev => ({ ...prev, [item.id]: 'downloading' }));
-      setProgressText(`Baixando ${done + 1} de ${queue.length}: ${item.title}`);
-      try {
-        const r = await fetch(item.file.url);
-        const blob = await r.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = item.file.filename;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      } catch {
-        const a = document.createElement('a');
-        a.href = item.file.url; a.target = '_blank'; a.download = item.file.filename;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      }
-      setDlStatus(prev => ({ ...prev, [item.id]: 'done' }));
-      done++;
-      await new Promise(res => setTimeout(res, 800));
-    }
-    setIsDownloading(false);
-    setProgressText(`✓ ${done} item${done > 1 ? 's' : ''} baixado${done > 1 ? 's' : ''}!`);
-  }, [queue, isDownloading]);
+  /** ZIP filename derived from current content type. */
+  const zipName = `modrinth-${filters.contentType}s`;
 
   // ─── Render ───────────────────────────────────────────────────────────────
-
-  const currentTypeInfo = CONTENT_TYPES.find(t => t.id === contentType)!;
-
-  const handleSetContentType = useCallback((t: ContentType) => {
-    setContentType(t);
-    if (t !== 'shader') setShaderLoader(null);
-  }, []);
 
   return (
     <div className="flex flex-col h-screen bg-bg-base text-ink-primary overflow-hidden select-none">
@@ -357,8 +322,10 @@ export default function Page() {
         </div>
         <span className="text-[15px] font-semibold tracking-tight">Modrinth Downloader</span>
         <span className="ml-auto text-xs font-mono text-ink-tertiary">
-          {versionError ? 'Erro ao carregar versões'
-            : versionCount === null ? 'Carregando versões...'
+          {versionError
+            ? 'Erro ao carregar versões'
+            : versionCount === null
+            ? 'Carregando versões...'
             : `${versionCount} versões disponíveis`}
         </span>
       </header>
@@ -371,14 +338,14 @@ export default function Page() {
 
           {/* Content type tabs */}
           <div className="px-4 pt-3 pb-0 border-b border-line-subtle flex-shrink-0">
-            <div className="flex gap-0">
+            <div className="flex">
               {CONTENT_TYPES.map(t => (
                 <button
                   key={t.id}
-                  onClick={() => handleSetContentType(t.id)}
+                  onClick={() => setContentType(t.id)}
                   className={[
                     'px-3.5 py-2.5 text-xs font-medium border-b-2 transition-all duration-150 -mb-px',
-                    contentType === t.id
+                    filters.contentType === t.id
                       ? 'border-brand text-brand'
                       : 'border-transparent text-ink-secondary hover:text-ink-primary',
                   ].join(' ')}
@@ -390,55 +357,46 @@ export default function Page() {
           </div>
 
           {/* Version + loader row */}
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-line-subtle flex-shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-line-subtle flex-shrink-0 flex-wrap">
+
+            {/* MC version */}
             <select
-              value={selectedVersion}
-              onChange={e => setSelectedVersion(e.target.value)}
+              value={filters.version}
+              onChange={e => setVersion(e.target.value)}
               className="h-7 px-2.5 rounded-md border border-line-DEFAULT bg-bg-surface text-ink-primary text-[11px] font-mono cursor-pointer transition-colors hover:border-line-strong focus:border-brand focus:shadow-[0_0_0_2px_rgba(27,217,106,0.15)] w-28 flex-shrink-0"
             >
               {!versions.length && <option value="">...</option>}
               {versions.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
 
+            {/* Mod loader */}
             {currentTypeInfo.usesLoader && (
-              <div className="flex gap-1.5">
-                {LOADERS.map(l => (
-                  <button
-                    key={l.id}
-                    onClick={() => setSelectedLoader(l.id)}
-                    className={[
-                      'h-7 px-3 rounded-md text-[11px] border transition-all duration-150 font-medium',
-                      selectedLoader === l.id
-                        ? 'bg-brand-glow border-brand text-brand'
-                        : 'bg-bg-surface border-line-DEFAULT text-ink-secondary hover:border-line-strong hover:text-ink-primary',
-                    ].join(' ')}
-                  >
-                    {l.label}
-                  </button>
-                ))}
-              </div>
+              <PillToggle<Loader>
+                options={LOADERS}
+                active={filters.loader}
+                onToggle={setLoader}
+              />
             )}
 
-            {contentType === 'shader' && (
-              <div className="flex gap-1.5">
-                {SHADER_LOADERS.map(l => (
-                  <button
-                    key={l.id}
-                    onClick={() => setShaderLoader(prev => prev === l.id ? null : l.id)}
-                    className={[
-                      'h-7 px-3 rounded-md text-[11px] border transition-all duration-150 font-medium',
-                      shaderLoader === l.id
-                        ? 'bg-brand-glow border-brand text-brand'
-                        : 'bg-bg-surface border-line-DEFAULT text-ink-secondary hover:border-line-strong hover:text-ink-primary',
-                    ].join(' ')}
-                  >
-                    {l.label}
-                  </button>
-                ))}
-              </div>
+            {/* Shader renderer */}
+            {filters.contentType === 'shader' && (
+              <PillToggle<ShaderLoader>
+                options={SHADER_LOADERS}
+                active={filters.shaderLoader}
+                onToggle={toggleShaderLoader}
+              />
             )}
 
-            {/* Search input — right-aligned, expands */}
+            {/* Plugin platform */}
+            {filters.contentType === 'plugin' && (
+              <PillToggle<PluginLoader>
+                options={PLUGIN_LOADERS}
+                active={filters.pluginLoader}
+                onToggle={togglePluginLoader}
+              />
+            )}
+
+            {/* Search input */}
             <div className="flex gap-1.5 ml-auto flex-1 max-w-[260px]">
               <div className="relative flex-1">
                 <input
@@ -475,7 +433,6 @@ export default function Page() {
           {/* Results list */}
           <div className="flex-1 overflow-y-auto relative">
 
-            {/* Loading overlay (shows spinner over stale results) */}
             {isLoading && results.length > 0 && (
               <div className="absolute inset-0 bg-bg-base/60 flex items-start justify-center pt-10 z-10 pointer-events-none">
                 <div className="flex items-center gap-2 text-ink-secondary text-xs bg-bg-surface border border-line-subtle rounded-lg px-3 py-2 shadow-lg">
@@ -484,14 +441,12 @@ export default function Page() {
               </div>
             )}
 
-            {/* Full-page loading (first load) */}
             {isLoading && results.length === 0 && (
               <div className="flex items-center justify-center gap-2 py-16 text-ink-secondary text-xs">
                 <Spinner /> Carregando {currentTypeInfo.label.toLowerCase()}...
               </div>
             )}
 
-            {/* Error */}
             {!isLoading && hasError && (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-secondary text-xs">
                 <span className="text-2xl">⚠️</span>
@@ -499,33 +454,36 @@ export default function Page() {
               </div>
             )}
 
-            {/* No results */}
-            {!isLoading && !hasError && results.length === 0 && selectedVersion && (
+            {!isLoading && !hasError && results.length === 0 && filters.version && (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-secondary text-xs text-center">
                 <span className="text-2xl opacity-40">🔍</span>
                 <span>
                   Nenhum resultado para{' '}
-                  <strong className="text-ink-primary">{activeQuery || currentTypeInfo.label}</strong>
-                  {activeQuery && <><br />com {currentTypeInfo.usesLoader ? `${selectedLoader} ` : ''}{selectedVersion}</>}
+                  <strong className="text-ink-primary">
+                    {activeRef.current.query || currentTypeInfo.label}
+                  </strong>
+                  {activeRef.current.query && (
+                    <><br />com {filters.version}</>
+                  )}
                 </span>
               </div>
             )}
 
-            {/* Results */}
             {results.length > 0 && (
               <div>
                 {results.map((item, i) => {
-                  // only animate newly appended items
-                  const isNew = i >= offset - PAGE_SIZE;
-                  const status = addStatus[item.project_id];
-                  const added  = queue.some(q => q.id === item.project_id) || status === 'done';
+                  const isNew    = i >= offset - PAGE_SIZE;
+                  const queued   = inQueue(item.project_id);
+                  const qEntry   = queue.entries.find(e => e.id === item.project_id);
+                  const isActive = qEntry?.status === 'pending' || qEntry?.status === 'resolving';
+
                   return (
                     <div
                       key={item.project_id}
                       className={`flex items-start gap-3 px-4 py-3 border-b border-line-subtle hover:bg-bg-hover transition-colors cursor-default${isNew ? ' animate-fadeIn' : ''}`}
                       style={isNew ? { animationDelay: `${(i % PAGE_SIZE) * 20}ms` } : undefined}
                     >
-                      <ModIcon url={item.icon_url} title={item.title} />
+                      <ItemIcon url={item.icon_url} title={item.title} />
                       <div className="flex-1 min-w-0">
                         <div className="text-[13px] font-semibold truncate leading-tight">{item.title}</div>
                         <div className="text-xs text-ink-secondary mt-0.5 truncate leading-snug">{item.description}</div>
@@ -542,23 +500,22 @@ export default function Page() {
                       </div>
 
                       <button
-                        disabled={added || status === 'loading'}
-                        onClick={() => addItem(item.project_id, item.title, item.icon_url, contentType)}
+                        disabled={queued}
+                        onClick={() => queue.add(item.project_id, item.title, item.icon_url, filters)}
                         className={[
-                          'w-8 h-8 rounded-lg border text-xs font-bold flex items-center justify-center flex-shrink-0 transition-all duration-150',
-                          added
+                          'w-8 h-8 rounded-lg border text-xs flex items-center justify-center flex-shrink-0 transition-all duration-150',
+                          queued && !isActive
                             ? 'border-brand/40 bg-brand-glow text-brand cursor-default'
-                            : status === 'error'
-                            ? 'border-red-err/40 bg-red-err/10 text-red-err cursor-default'
-                            : status === 'loading'
+                            : isActive
                             ? 'border-line-DEFAULT bg-bg-surface text-ink-secondary cursor-wait'
                             : 'border-line-DEFAULT bg-bg-surface text-ink-secondary hover:border-brand hover:text-brand hover:bg-brand-glow active:scale-95',
                         ].join(' ')}
-                        title={added ? 'Na fila' : status === 'error' ? 'Sem versão compatível' : 'Adicionar à fila'}
+                        title={queued ? 'Na fila' : 'Adicionar à fila'}
                       >
-                        {status === 'loading' ? <Spinner size={12} />
-                          : added ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                          : status === 'error' ? '✗'
+                        {isActive
+                          ? <Spinner size={12} />
+                          : queued
+                          ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                           : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         }
                       </button>
@@ -566,7 +523,6 @@ export default function Page() {
                   );
                 })}
 
-                {/* Load more */}
                 {(hasMore || isLoadingMore) && (
                   <div className="flex justify-center py-4">
                     <button
@@ -584,18 +540,19 @@ export default function Page() {
         </div>
 
         {/* ── Right panel (queue) ─────────────────────────────────────────── */}
-        <div className="w-[280px] flex flex-col flex-shrink-0">
+        <div className="w-[290px] flex flex-col flex-shrink-0">
 
+          {/* Queue header */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-line-subtle flex-shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-[13px] font-semibold">Fila de download</span>
               <span className="min-w-[20px] h-5 px-1.5 bg-brand text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center font-mono">
-                {queue.length}
+                {queue.entries.length}
               </span>
             </div>
-            {queue.length > 0 && !isDownloading && (
+            {queue.entries.length > 0 && !queue.isDownloading && (
               <button
-                onClick={clearQueue}
+                onClick={queue.clear}
                 className="text-[11px] text-ink-tertiary hover:text-ink-secondary transition-colors px-2 py-1 rounded hover:bg-bg-hover"
               >
                 Limpar
@@ -603,8 +560,9 @@ export default function Page() {
             )}
           </div>
 
+          {/* Queue items */}
           <div className="flex-1 overflow-y-auto">
-            {queue.length === 0 ? (
+            {queue.entries.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-tertiary">
                 <span className="text-3xl opacity-25">📦</span>
                 <span className="text-xs text-center leading-relaxed">
@@ -612,41 +570,95 @@ export default function Page() {
                 </span>
               </div>
             ) : (
-              queue.map((item, i) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2.5 px-4 py-2.5 border-b border-line-subtle hover:bg-bg-hover transition-colors animate-slideIn"
-                  style={{ animationDelay: `${i * 20}ms` }}
-                >
-                  <StatusDot status={dlStatus[item.id] ?? 'pending'} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-medium truncate">{item.title}</div>
-                    <div className="text-[10px] font-mono text-ink-tertiary mt-0.5">
-                      {item.versionName}{item.sizeKb ? ` · ${fmtSize(item.sizeKb)}` : ''}
+              queue.entries.map((entry, i) => {
+                const lbl         = loaderLabel(entry.filters);
+                const isTransient = entry.status === 'pending' || entry.status === 'resolving';
+                const isError     = entry.status === 'error';
+                const slbl        = statusLabel(entry.status);
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-2.5 px-4 py-2.5 border-b border-line-subtle hover:bg-bg-hover transition-colors animate-slideIn"
+                    style={{ animationDelay: `${i * 15}ms` }}
+                  >
+                    <QueueStatusDot status={entry.status} />
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[12px] font-medium truncate">{entry.title}</span>
+                        {entry.isDependency && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-line-subtle text-ink-tertiary border border-line-DEFAULT flex-shrink-0">
+                            dep
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Status / metadata line */}
+                      {isTransient && (
+                        <div className="text-[10px] text-ink-tertiary mt-0.5">{slbl}</div>
+                      )}
+                      {isError && (
+                        <div className="text-[10px] text-red-err mt-0.5">
+                          {entry.errorReason === 'no_compatible_version'
+                            ? 'Sem versão compatível'
+                            : 'Falha de rede'}
+                        </div>
+                      )}
+                      {entry.resolved && !isTransient && (
+                        <div className="text-[10px] font-mono text-ink-tertiary mt-0.5 truncate">
+                          {entry.resolved.versionNumber}
+                          {entry.resolved.sizeKb ? ` · ${fmtSize(entry.resolved.sizeKb)}` : ''}
+                          {lbl ? ` · ${lbl}` : ''}
+                        </div>
+                      )}
+
+                      {/* Per-item download progress bar */}
+                      {entry.status === 'downloading' && entry.progress > 0 && (
+                        <div className="mt-1 h-0.5 bg-line-subtle rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-brand transition-all duration-200"
+                            style={{ width: `${entry.progress}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
+
+                    {/* Actions */}
+                    {!queue.isDownloading && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {isError && (
+                          <button
+                            onClick={() => queue.retry(entry.id)}
+                            className="text-ink-tertiary hover:text-brand text-sm w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
+                            title="Tentar novamente"
+                          >
+                            ↺
+                          </button>
+                        )}
+                        <button
+                          onClick={() => queue.remove(entry.id)}
+                          className="text-ink-muted hover:text-ink-secondary text-base w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors leading-none"
+                          title="Remover"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {!isDownloading && (
-                    <button
-                      onClick={() => removeFromQueue(item.id)}
-                      className="text-ink-muted hover:text-ink-secondary text-base w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors leading-none"
-                      title="Remover"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
+          {/* Download footer */}
           <div className="px-4 py-3.5 border-t border-line-subtle flex-shrink-0">
             <button
-              onClick={downloadAll}
-              disabled={queue.length === 0 || isDownloading}
+              onClick={() => queue.downloadZip(zipName)}
+              disabled={queue.readyCount === 0 || queue.isDownloading}
               className="w-full h-10 rounded-lg bg-brand border border-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover hover:border-brand-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {isDownloading ? (
-                <><Spinner size={13} /> Baixando...</>
+              {queue.isDownloading ? (
+                <><Spinner size={13} /> Criando ZIP... {queue.zipProgress}%</>
               ) : (
                 <>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -654,14 +666,41 @@ export default function Page() {
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" y1="15" x2="12" y2="3"/>
                   </svg>
-                  Baixar todos ({queue.length})
+                  Baixar como ZIP ({queue.readyCount})
                 </>
               )}
             </button>
-            {progressText && (
-              <p className="text-[11px] font-mono text-ink-secondary text-center mt-2 truncate">
-                {progressText}
-              </p>
+
+            {/* ZIP progress bar */}
+            {queue.isDownloading && (
+              <div className="mt-2 h-1 bg-line-subtle rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-brand transition-all duration-300 ease-out"
+                  style={{ width: `${queue.zipProgress}%` }}
+                />
+              </div>
+            )}
+
+            {/* Status summary below the button */}
+            {!queue.isDownloading && queue.entries.length > 0 && (
+              <div className="mt-2 flex gap-3 justify-center text-[10px] font-mono text-ink-tertiary">
+                {(() => {
+                  const counts = {
+                    pending:  queue.entries.filter(e => e.status === 'pending' || e.status === 'resolving').length,
+                    ready:    queue.readyCount,
+                    done:     queue.entries.filter(e => e.status === 'done').length,
+                    error:    queue.entries.filter(e => e.status === 'error').length,
+                  };
+                  return (
+                    <>
+                      {counts.pending > 0 && <span className="text-ink-tertiary">{counts.pending} resolvendo</span>}
+                      {counts.ready   > 0 && <span className="text-brand">{counts.ready} pronto{counts.ready > 1 ? 's' : ''}</span>}
+                      {counts.done    > 0 && <span className="text-brand">{counts.done} baixado{counts.done > 1 ? 's' : ''}</span>}
+                      {counts.error   > 0 && <span className="text-red-err">{counts.error} erro{counts.error > 1 ? 's' : ''}</span>}
+                    </>
+                  );
+                })()}
+              </div>
             )}
           </div>
         </div>
