@@ -28,6 +28,16 @@ export async function GET(request: NextRequest) {
     headers: { 'x-api-key': apiKey },
   });
 
+  const contentType = upstream.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    // CurseForge returns plain-text errors (e.g. "Forbidden: ...") for bad keys.
+    const text = await upstream.text();
+    return NextResponse.json(
+      { error: `CurseForge error (HTTP ${upstream.status}): ${text}` },
+      { status: upstream.status },
+    );
+  }
+
   const body = await upstream.json();
   return NextResponse.json(body, { status: upstream.status });
 }
