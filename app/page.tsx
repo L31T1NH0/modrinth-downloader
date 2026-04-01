@@ -321,7 +321,7 @@ export default function Page() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col bg-bg-base text-ink-primary overflow-hidden select-none" style={{ height: '100svh' }}>
+    <div className="flex flex-col bg-bg-base text-ink-primary overflow-hidden select-none" style={{ height: '100dvh' }}>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <header className="flex items-center gap-3 px-5 py-3.5 border-b border-line-subtle flex-shrink-0">
