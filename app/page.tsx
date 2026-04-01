@@ -219,12 +219,6 @@ export default function Page() {
     }
 
     try {
-      if (snapshot.source === 'curseforge' && !process.env.NEXT_PUBLIC_CURSEFORGE_API_KEY) {
-        setHasError(true);
-        setIsLoading(false);
-        return;
-      }
-
       const service = snapshot.source === 'curseforge' ? curseforgeService : modrinthService;
       const signal  = append ? undefined : abortRef.current?.signal;
       const page    = await service.searchProjects(query, snapshot, startOffset, signal);

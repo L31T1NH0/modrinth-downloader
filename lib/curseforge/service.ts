@@ -15,15 +15,12 @@ import type {
   CfVersionsResponse,
 } from './types';
 
-const BASE    = 'https://api.curseforge.com/v1';
+/** Requests go through our Next.js proxy — the real API key stays server-side. */
+const BASE    = '/api/curseforge';
 const GAME_ID = 432;
 
 /** Results per page — matches the Modrinth service constant. */
 export const PAGE_SIZE = 20;
-
-function cfHeaders(): HeadersInit {
-  return { 'x-api-key': process.env.NEXT_PUBLIC_CURSEFORGE_API_KEY ?? '' };
-}
 
 // ─── Internal mappings ────────────────────────────────────────────────────────
 
@@ -71,7 +68,7 @@ function mapCfFileToModFile(file: CfFile): ModFile {
  * Throws on network error or non-OK HTTP status.
  */
 export async function fetchGameVersions(): Promise<string[]> {
-  const r = await fetch(`${BASE}/minecraft/version`, { headers: cfHeaders() });
+  const r = await fetch(`${BASE}/minecraft/version`);
   if (!r.ok) throw new Error(`CF fetchGameVersions: HTTP ${r.status}`);
   const data: CfVersionsResponse = await r.json();
   return data.data
@@ -104,10 +101,7 @@ export async function searchProjects(
     if (loaderType !== undefined) params.set('modLoaderType', String(loaderType));
   }
 
-  const r = await fetch(`${BASE}/mods/search?${params}`, {
-    headers: cfHeaders(),
-    signal,
-  });
+  const r = await fetch(`${BASE}/mods/search?${params}`, { signal });
   if (!r.ok) throw new Error(`CF searchProjects: HTTP ${r.status}`);
 
   const data: CfSearchResponse = await r.json();
@@ -141,9 +135,7 @@ export async function resolveProjectVersion(
       if (loaderType !== undefined) params.set('modLoaderType', String(loaderType));
     }
 
-    const r = await fetch(`${BASE}/mods/${projectId}/files?${params}`, {
-      headers: cfHeaders(),
-    });
+    const r = await fetch(`${BASE}/mods/${projectId}/files?${params}`);
     if (!r.ok) return { ok: false, reason: 'network' };
 
     const data: CfFilesResponse = await r.json();
@@ -178,7 +170,7 @@ export async function resolveProjectVersion(
  * Throws on network error or non-OK HTTP status.
  */
 export async function fetchProjectInfo(projectId: string): Promise<ProjectInfo> {
-  const r = await fetch(`${BASE}/mods/${projectId}`, { headers: cfHeaders() });
+  const r = await fetch(`${BASE}/mods/${projectId}`);
   if (!r.ok) throw new Error(`CF fetchProjectInfo: HTTP ${r.status}`);
   const data: CfModResponse = await r.json();
   return {
