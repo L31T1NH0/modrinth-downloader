@@ -67,4 +67,10 @@ option {
   .text-mono {
     font-family: var(--font-jb-mono), monospace;
   }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }

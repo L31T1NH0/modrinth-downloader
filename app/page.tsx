@@ -181,6 +181,9 @@ export default function Page() {
   // ── Queue ─────────────────────────────────────────────────────────────────
   const queue = useQueue();
 
+  // ── Mobile panel ─────────────────────────────────────────────────────────
+  const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
+
   // ── Load MC versions (re-fetched when source changes) ────────────────────
 
   useEffect(() => {
@@ -334,17 +337,17 @@ export default function Page() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Left panel ─────────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col border-r border-line-subtle overflow-hidden min-w-0">
+        <div className={`${mobilePanel === 'queue' ? 'hidden' : 'flex'} md:flex flex-1 flex-col border-r border-line-subtle overflow-hidden min-w-0`}>
 
           {/* Content type tabs */}
           <div className="px-4 pt-3 pb-0 border-b border-line-subtle flex-shrink-0">
-            <div className="flex">
+            <div className="flex overflow-x-auto scrollbar-none">
               {CONTENT_TYPES.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setContentType(t.id)}
                   className={[
-                    'px-3.5 py-2.5 text-xs font-medium border-b-2 transition-all duration-150 -mb-px',
+                    'px-3.5 py-2.5 text-xs font-medium border-b-2 transition-all duration-150 -mb-px whitespace-nowrap',
                     filters.contentType === t.id
                       ? 'border-brand text-brand'
                       : 'border-transparent text-ink-secondary hover:text-ink-primary',
@@ -407,7 +410,7 @@ export default function Page() {
             )}
 
             {/* Search input */}
-            <div className="flex gap-1.5 ml-auto flex-1 max-w-[260px]">
+            <div className="flex gap-1.5 w-full md:ml-auto md:flex-1 md:max-w-[260px]">
               <div className="relative flex-1">
                 <input
                   type="text"
@@ -511,7 +514,7 @@ export default function Page() {
 
                       <button
                         disabled={queued}
-                        onClick={() => queue.add(item.project_id, item.title, item.icon_url, filters)}
+                        onClick={() => { queue.add(item.project_id, item.title, item.icon_url, filters); setMobilePanel('queue'); }}
                         className={[
                           'w-8 h-8 rounded-lg border text-xs flex items-center justify-center flex-shrink-0 transition-all duration-150',
                           queued && !isActive
@@ -550,7 +553,7 @@ export default function Page() {
         </div>
 
         {/* ── Right panel (queue) ─────────────────────────────────────────── */}
-        <div className="w-[290px] flex flex-col flex-shrink-0">
+        <div className={`${mobilePanel === 'search' ? 'hidden' : 'flex'} md:flex w-full md:w-[290px] flex-col flex-shrink-0`}>
 
           {/* Queue header */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-line-subtle flex-shrink-0">
@@ -715,6 +718,33 @@ export default function Page() {
           </div>
         </div>
       </div>
+
+      {/* ── Mobile bottom nav ────────────────────────────────────────────── */}
+      <nav className="md:hidden flex-shrink-0 flex border-t border-line-subtle bg-bg-base">
+        <button
+          onClick={() => setMobilePanel('search')}
+          className={`flex-1 py-3.5 text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
+            mobilePanel === 'search' ? 'text-brand' : 'text-ink-secondary'
+          }`}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+          Buscar
+        </button>
+        <button
+          onClick={() => setMobilePanel('queue')}
+          className={`flex-1 py-3.5 text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
+            mobilePanel === 'queue' ? 'text-brand' : 'text-ink-secondary'
+          }`}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Fila
+          {queue.entries.length > 0 && (
+            <span className="min-w-[18px] h-[18px] px-1 bg-brand text-brand-dark text-[9px] font-bold rounded-full flex items-center justify-center font-mono">
+              {queue.entries.length}
+            </span>
+          )}
+        </button>
+      </nav>
     </div>
   );
 }
