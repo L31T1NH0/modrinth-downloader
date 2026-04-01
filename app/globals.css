@@ -3,18 +3,18 @@
 @theme {
   /* Colors */
   --color-bg-base: #07090a;
-  --color-bg-surface: #0d1114;
-  --color-bg-hover: #131820;
-  --color-bg-card: #10151a;
+  --color-bg-surface: #111820;
+  --color-bg-hover: #192230;
+  --color-bg-card: #141c27;
 
-  --color-line-subtle: #181f28;
-  --color-line: #1e2a38;
-  --color-line-strong: #253347;
+  --color-line-subtle: #1f2d3d;
+  --color-line: #273848;
+  --color-line-strong: #324d6a;
 
-  --color-ink-primary: #d6e4f0;
-  --color-ink-secondary: #5a7a96;
-  --color-ink-tertiary: #334d63;
-  --color-ink-muted: #1e3149;
+  --color-ink-primary: #e2eef8;
+  --color-ink-secondary: #7099bb;
+  --color-ink-tertiary: #4a6a88;
+  --color-ink-muted: #2d4a66;
 
   --color-brand: #1bd96a;
   --color-brand-dim: #159950;
@@ -90,11 +90,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e2a38;
+  background: #273848;
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #253347;
+  background: #324d6a;
 }
 
 /* Focus-visible only */
