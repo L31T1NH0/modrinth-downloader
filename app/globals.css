@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-outfit: 'Outfit', sans-serif;
+  --font-jb-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #07090a;
+  color: #d6e4f0;
+  font-family: var(--font-outfit), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e2a38;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #253347;
+}
+
+/* Select arrow override */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235a7a96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px !important;
+}
+
+/* Option text in dark context */
+option {
+  background: #0d1114;
+  color: #d6e4f0;
+}
+
+/* Focus-visible only */
+*:focus { outline: none; }
+*:focus-visible {
+  outline: 2px solid rgba(27, 217, 106, 0.5);
+  outline-offset: 1px;
+}
+
+@layer utilities {
+  .text-mono {
+    font-family: var(--font-jb-mono), monospace;
+  }
+}
