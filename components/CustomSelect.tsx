@@ -61,7 +61,7 @@ export function CustomSelect({ value, onChange, options, placeholder, width = 'w
       {isOpen && (
         <div
           ref={menuRef}
-          className="absolute top-full left-0 right-0 mt-1 bg-bg-surface border border-line-subtle rounded-md shadow-lg z-10 overflow-hidden"
+          className="absolute top-full left-0 right-0 mt-1 bg-bg-surface border border-line-subtle rounded-md shadow-lg z-10 max-h-48 overflow-y-auto"
         >
           {options.map(opt => (
             <button
