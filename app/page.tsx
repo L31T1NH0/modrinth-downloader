@@ -76,10 +76,10 @@ function loaderLabel(f: Filters): string {
 
 /** User-facing label for queue item status. */
 function statusLabel(s: QueueItemStatus): string {
-  if (s === 'resolving')   return 'Resolvendo...';
-  if (s === 'pending')     return 'Aguardando...';
-  if (s === 'downloading') return 'Baixando...';
-  if (s === 'done')        return 'Concluído';
+  if (s === 'resolving')   return 'Resolving...';
+  if (s === 'pending')     return 'Awaiting...';
+  if (s === 'downloading') return 'Downloading...';
+  if (s === 'done')        return 'Completed';
   return '';
 }
 
@@ -456,7 +456,7 @@ export default function Page() {
                   <button
                     onClick={clearSearch}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink-secondary text-xs leading-none"
-                    title="Limpar busca"
+                    title="Clear search"
                   >
                     ×
                   </button>
@@ -488,21 +488,21 @@ export default function Page() {
             {isLoading && results.length > 0 && (
               <div className="absolute inset-0 bg-bg-base/60 flex items-start justify-center pt-10 z-10 pointer-events-none">
                 <div className="flex items-center gap-2 text-ink-secondary text-xs bg-bg-surface border border-line-subtle rounded-lg px-3 py-2 shadow-lg">
-                  <Spinner size={12} /> Atualizando...
+                  <Spinner size={12} /> Updating...
                 </div>
               </div>
             )}
 
             {isLoading && results.length === 0 && (
               <div className="flex items-center justify-center gap-2 py-16 text-ink-secondary text-xs">
-                <Spinner /> Carregando {currentTypeInfo.label.toLowerCase()}...
+                <Spinner /> Loading {currentTypeInfo.label.toLowerCase()}...
               </div>
             )}
 
             {!isLoading && hasError && (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-secondary text-xs">
                 <span className="text-2xl">⚠️</span>
-                Erro ao buscar. Verifique sua conexão.
+                Error searching. Check your connection.
               </div>
             )}
 
@@ -510,12 +510,12 @@ export default function Page() {
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-secondary text-xs text-center">
                 <span className="text-2xl opacity-40">🔍</span>
                 <span>
-                  Nenhum resultado para{' '}
+                  No results for{' '}
                   <strong className="text-ink-primary">
                     {activeRef.current.query || currentTypeInfo.label}
                   </strong>
                   {activeRef.current.query && (
-                    <><br />com {filters.version}</>
+                    <><br />with {filters.version}</>
                   )}
                 </span>
               </div>
@@ -570,14 +570,14 @@ export default function Page() {
                         disabled={queued}
                         onClick={() => { queue.add(item.project_id, item.title, item.icon_url, filters); setMobilePanel('queue'); }}
                         className={[
-                          'w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150',
+                          'w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150 leading-none',
                           queued && !isActive
                             ? 'bg-brand-glow text-brand cursor-default'
                             : isActive
                             ? 'bg-bg-surface text-ink-secondary cursor-wait'
                             : 'bg-bg-surface text-ink-secondary hover:text-brand hover:bg-brand-glow active:scale-95',
                         ].join(' ')}
-                        title={queued ? 'Na fila' : 'Adicionar à fila'}
+                        title={queued ? 'In queue' : 'Add to queue'}
                       >
                         {isActive
                           ? <Spinner size={12} />
@@ -597,7 +597,7 @@ export default function Page() {
                       disabled={isLoadingMore}
                       className="h-8 px-5 rounded-lg bg-bg-surface text-ink-secondary text-xs font-medium flex items-center gap-2 transition-all hover:text-ink-primary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isLoadingMore ? <><Spinner size={11} /> Carregando...</> : 'Carregar mais'}
+                      {isLoadingMore ? <><Spinner size={11} /> Loading...</> : 'Load more'}
                     </button>
                   </div>
                 )}
@@ -612,7 +612,7 @@ export default function Page() {
           {/* Queue header */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-line-subtle shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold">Fila de download</span>
+              <span className="text-[13px] font-semibold">Download queue</span>
               <span className="min-w-[20px] h-5 px-1.5 bg-brand text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center font-mono">
                 {queue.entries.length}
               </span>
@@ -622,7 +622,7 @@ export default function Page() {
                 onClick={queue.clear}
                 className="text-[11px] text-ink-tertiary hover:text-ink-secondary transition-colors px-2 py-1 rounded hover:bg-bg-hover"
               >
-                Limpar
+                Clear
               </button>
             )}
           </div>
@@ -633,7 +633,7 @@ export default function Page() {
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-tertiary">
                 <span className="text-3xl opacity-25">📦</span>
                 <span className="text-xs text-center leading-relaxed">
-                  Fila vazia.<br />Adicione itens da busca.
+                  Queue empty.<br />Add items from search.
                 </span>
               </div>
             ) : (
@@ -667,8 +667,8 @@ export default function Page() {
                       {isError && (
                         <div className="text-[10px] text-red-err mt-0.5">
                           {entry.errorReason === 'no_compatible_version'
-                            ? 'Sem versão compatível'
-                            : 'Falha de rede'}
+                            ? 'No compatible version'
+                            : 'Network error'}
                         </div>
                       )}
                       {entry.resolved && !isTransient && (
@@ -697,7 +697,7 @@ export default function Page() {
                           <button
                             onClick={() => queue.retry(entry.id)}
                             className="text-ink-tertiary hover:text-brand text-sm w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
-                            title="Tentar novamente"
+                            title="Try again"
                           >
                             ↺
                           </button>
@@ -705,7 +705,7 @@ export default function Page() {
                         <button
                           onClick={() => queue.remove(entry.id)}
                           className="text-ink-muted hover:text-ink-secondary text-base w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors leading-none"
-                          title="Remover"
+                          title="Remove"
                         >
                           ×
                         </button>
@@ -725,7 +725,7 @@ export default function Page() {
               className="w-full h-10 rounded-lg bg-brand border border-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover hover:border-brand-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {queue.isDownloading ? (
-                <><Spinner size={13} /> Criando ZIP... {queue.zipProgress}%</>
+                <><Spinner size={13} /> Creating ZIP... {queue.zipProgress}%</>
               ) : (
                 <>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -733,7 +733,7 @@ export default function Page() {
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" y1="15" x2="12" y2="3"/>
                   </svg>
-                  Baixar como ZIP ({queue.readyCount})
+                  Download as ZIP ({queue.readyCount})
                 </>
               )}
             </button>
@@ -760,10 +760,10 @@ export default function Page() {
                   };
                   return (
                     <>
-                      {counts.pending > 0 && <span className="text-ink-tertiary">{counts.pending} resolvendo</span>}
-                      {counts.ready   > 0 && <span className="text-brand">{counts.ready} pronto{counts.ready > 1 ? 's' : ''}</span>}
-                      {counts.done    > 0 && <span className="text-brand">{counts.done} baixado{counts.done > 1 ? 's' : ''}</span>}
-                      {counts.error   > 0 && <span className="text-red-err">{counts.error} erro{counts.error > 1 ? 's' : ''}</span>}
+                      {counts.pending > 0 && <span className="text-ink-tertiary">{counts.pending} resolving</span>}
+                      {counts.ready   > 0 && <span className="text-brand">{counts.ready} ready</span>}
+                      {counts.done    > 0 && <span className="text-brand">{counts.done} downloaded</span>}
+                      {counts.error   > 0 && <span className="text-red-err">{counts.error} error{counts.error > 1 ? 's' : ''}</span>}
                     </>
                   );
                 })()}
@@ -782,7 +782,7 @@ export default function Page() {
           }`}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
-          Buscar
+          Search
         </button>
         <button
           onClick={() => setMobilePanel('queue')}
@@ -791,7 +791,7 @@ export default function Page() {
           }`}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Fila
+          Queue
           {queue.entries.length > 0 && (
             <span className="min-w-[18px] h-[18px] px-1 bg-brand text-brand-dark text-[9px] font-bold rounded-full flex items-center justify-center font-mono">
               {queue.entries.length}
