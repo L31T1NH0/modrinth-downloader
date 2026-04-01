@@ -481,7 +481,7 @@ export default function Page() {
             {fallbackVersion && !isLoading && (
               <div className="px-4 py-2 bg-brand-glow border-b border-brand/30 text-brand text-xs flex items-center gap-2">
                 <span>ℹ️</span>
-                <span>No mods for {filters.version}. Showing results from {fallbackVersion} instead.</span>
+                <span>No {currentTypeInfo.label.toLowerCase()} for {filters.version}. Showing results from {fallbackVersion} instead.</span>
               </div>
             )}
 
