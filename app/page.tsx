@@ -13,6 +13,7 @@ import type {
   SearchResult,
 } from '@/lib/modrinth/types';
 import { useQueue, type QueueItemStatus } from '@/hooks/useQueue';
+import { CustomSelect } from '@/components/CustomSelect';
 
 const PAGE_SIZE = modrinthService.PAGE_SIZE;
 
@@ -177,12 +178,16 @@ export default function Page() {
     query: '', filters: DEFAULT_FILTERS,
   });
   const abortRef  = useRef<AbortController | null>(null);
+  const animatedIds = useRef<Set<string>>(new Set());
 
   // ── Queue ─────────────────────────────────────────────────────────────────
   const queue = useQueue();
 
   // ── Mobile panel ─────────────────────────────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
+
+  // ── Fallback version tracking ─────────────────────────────────────────────
+  const [fallbackVersion, setFallbackVersion] = useState<string | null>(null);
 
   // ── Load MC versions (re-fetched when source changes) ────────────────────
 
@@ -217,6 +222,8 @@ export default function Page() {
       setHasError(false);
       setOffset(0);
       activeRef.current = { query, filters: snapshot };
+      animatedIds.current.clear();
+      setFallbackVersion(null);
     } else {
       setIsLoadingMore(true);
     }
@@ -224,7 +231,30 @@ export default function Page() {
     try {
       const service = snapshot.source === 'curseforge' ? curseforgeService : modrinthService;
       const signal  = append ? undefined : abortRef.current?.signal;
-      const page    = await service.searchProjects(query, snapshot, startOffset, signal);
+      let page      = await service.searchProjects(query, snapshot, startOffset, signal);
+      let usedVersion = snapshot.version;
+
+      // Fallback to older versions if no results found on fresh search
+      if (!append && page.hits.length === 0) {
+        const currentIdx = versions.indexOf(snapshot.version);
+        console.log('No results for version:', snapshot.version, 'Index:', currentIdx, 'Total versions:', versions.length);
+        // Try older versions (next indices, since versions are sorted newest-first)
+        if (currentIdx >= 0 && currentIdx < versions.length - 1) {
+          for (let i = currentIdx + 1; i < versions.length; i++) {
+            const prevVersion = versions[i];
+            console.log('Trying fallback version:', prevVersion);
+            const fallbackSnapshot = { ...snapshot, version: prevVersion };
+            page = await service.searchProjects(query, fallbackSnapshot, 0, signal);
+            console.log('Fallback results:', page.hits.length);
+            if (page.hits.length > 0) {
+              usedVersion = prevVersion;
+              setFallbackVersion(prevVersion);
+              console.log('Found results in:', prevVersion);
+              break;
+            }
+          }
+        }
+      }
 
       if (append) {
         setResults(prev => [...prev, ...page.hits]);
@@ -243,7 +273,7 @@ export default function Page() {
       if (append) setIsLoadingMore(false);
       else        setIsLoading(false);
     }
-  }, []);
+  }, [versions]);
 
   // Re-fetch on filter change; clears query to show browse mode.
   useEffect(() => {
@@ -324,13 +354,33 @@ export default function Page() {
     <div className="flex flex-col bg-bg-base text-ink-primary overflow-hidden select-none" style={{ height: '100dvh' }}>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 px-5 py-3.5 border-b border-line-subtle flex-shrink-0">
-        <div className="w-7 h-7 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="#0a2e18">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-4h2V8h-2v8zm-3 0h2V8H8v8zm6 0h2V8h-2v8z"/>
-          </svg>
+      <header className="border-b border-line-subtle flex-shrink-0">
+        <div className="flex items-center gap-6 px-5 py-2.5">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 rounded-md bg-brand flex items-center justify-center flex-shrink-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#0a2e18">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-4h2V8h-2v8zm-3 0h2V8H8v8zm6 0h2V8h-2v8z"/>
+              </svg>
+            </div>
+            <span className="text-[14px] font-semibold tracking-tight">dynrinth</span>
+          </div>
+          <div className="flex overflow-x-auto scrollbar-none gap-6">
+            {CONTENT_TYPES.filter(t => filters.source === 'modrinth' || t.id !== 'plugin').map(t => (
+              <button
+                key={t.id}
+                onClick={() => setContentType(t.id)}
+                className={[
+                  'px-0 py-2 text-xs font-medium border-b-2 transition-all duration-150 -mb-px whitespace-nowrap',
+                  filters.contentType === t.id
+                    ? 'border-brand text-ink-primary'
+                    : 'border-transparent text-ink-secondary hover:text-ink-primary',
+                ].join(' ')}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <span className="text-[15px] font-semibold tracking-tight">dynrinth</span>
       </header>
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
@@ -339,48 +389,27 @@ export default function Page() {
         {/* ── Left panel ─────────────────────────────────────────────────── */}
         <div className={`${mobilePanel === 'queue' ? 'hidden' : 'flex'} md:flex flex-1 flex-col border-r border-line-subtle overflow-hidden min-w-0`}>
 
-          {/* Content type tabs */}
-          <div className="px-4 pt-3 pb-0 border-b border-line-subtle flex-shrink-0">
-            <div className="flex overflow-x-auto scrollbar-none">
-              {CONTENT_TYPES.filter(t => filters.source === 'modrinth' || t.id !== 'plugin').map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setContentType(t.id)}
-                  className={[
-                    'px-3.5 py-2.5 text-xs font-medium border-b-2 transition-all duration-150 -mb-px whitespace-nowrap',
-                    filters.contentType === t.id
-                      ? 'border-brand text-brand'
-                      : 'border-transparent text-ink-secondary hover:text-ink-primary',
-                  ].join(' ')}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Version + loader row */}
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-line-subtle flex-shrink-0 flex-wrap">
+          <div className="flex items-center gap-3 px-5 py-2 border-b border-line-subtle flex-shrink-0 flex-wrap">
 
             {/* API source */}
-            <select
+            <CustomSelect
               value={filters.source}
-              onChange={e => setSource(e.target.value as Source)}
-              className="h-7 px-2.5 rounded-md bg-bg-surface text-ink-primary text-[11px] font-mono cursor-pointer transition-colors focus:ring-2 focus:ring-brand focus:outline-none w-32 flex-shrink-0"
-            >
-              <option value="modrinth">Modrinth</option>
-              <option value="curseforge">CurseForge</option>
-            </select>
+              onChange={v => setSource(v as Source)}
+              options={[
+                { value: 'modrinth', label: 'Modrinth' },
+                { value: 'curseforge', label: 'CurseForge' },
+              ]}
+              width="w-32"
+            />
 
             {/* MC version */}
-            <select
+            <CustomSelect
               value={filters.version}
-              onChange={e => setVersion(e.target.value)}
-              className="h-7 px-2.5 rounded-md bg-bg-surface text-ink-primary text-[11px] font-mono cursor-pointer transition-colors focus:ring-2 focus:ring-brand focus:outline-none w-28 flex-shrink-0"
-            >
-              {!versions.length && <option value="">...</option>}
-              {versions.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
+              onChange={setVersion}
+              options={versions.length ? versions.map(v => ({ value: v, label: v })) : [{ value: '', label: '...' }]}
+              width="w-28"
+            />
 
             {/* Mod loader */}
             {currentTypeInfo.usesLoader && (
@@ -410,15 +439,18 @@ export default function Page() {
             )}
 
             {/* Search input */}
-            <div className="flex gap-1.5 w-full md:ml-auto md:flex-1 md:max-w-[260px]">
+            <div className="flex gap-1 w-full md:ml-auto md:flex-1 md:max-w-sm">
               <div className="relative flex-1">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-tertiary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={`Buscar ${currentTypeInfo.label.toLowerCase()}...`}
-                  className="w-full h-7 pl-2.5 pr-7 rounded-md bg-bg-surface text-ink-primary text-[11px] placeholder:text-ink-tertiary transition-colors focus:ring-2 focus:ring-brand focus:outline-none"
+                  placeholder={`Search items...`}
+                  className="w-full h-7 pl-8 pr-2 rounded text-ink-primary text-xs placeholder:text-ink-tertiary transition-colors focus:ring-2 focus:ring-brand focus:outline-none bg-bg-surface"
                 />
                 {searchQuery && (
                   <button
@@ -445,6 +477,13 @@ export default function Page() {
 
           {/* Results list */}
           <div className="flex-1 overflow-y-auto relative">
+
+            {fallbackVersion && !isLoading && (
+              <div className="px-4 py-2 bg-brand-glow border-b border-brand/30 text-brand text-xs flex items-center gap-2">
+                <span>ℹ️</span>
+                <span>No mods for {filters.version}. Showing results from {fallbackVersion} instead.</span>
+              </div>
+            )}
 
             {isLoading && results.length > 0 && (
               <div className="absolute inset-0 bg-bg-base/60 flex items-start justify-center pt-10 z-10 pointer-events-none">
@@ -485,10 +524,15 @@ export default function Page() {
             {results.length > 0 && (
               <div>
                 {results.map((item, i) => {
-                  const isNew    = i >= offset - PAGE_SIZE;
+                  const isNew    = i >= offset - PAGE_SIZE && !animatedIds.current.has(item.project_id);
                   const queued   = inQueue(item.project_id);
                   const qEntry   = queue.entries.find(e => e.id === item.project_id);
                   const isActive = qEntry?.status === 'pending' || qEntry?.status === 'resolving';
+
+                  // Mark this item as animated
+                  if (isNew) {
+                    animatedIds.current.add(item.project_id);
+                  }
 
                   return (
                     <div
