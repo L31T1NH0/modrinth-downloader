@@ -570,7 +570,7 @@ export default function Page() {
                         disabled={queued}
                         onClick={() => { queue.add(item.project_id, item.title, item.icon_url, filters); setMobilePanel('queue'); }}
                         className={[
-                          'w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150 leading-none',
+                          'w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150 leading-none self-center',
                           queued && !isActive
                             ? 'bg-brand-glow text-brand cursor-default'
                             : isActive
