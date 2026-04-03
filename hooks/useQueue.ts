@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useRef, useCallback } from 'react';
 import * as modrinthService from '@/lib/modrinth/service';
 import * as curseforgeService from '@/lib/curseforge/service';
-import { downloadAsZip, downloadSingleFile, type DownloadItem } from '@/lib/download';
+import { downloadAsZip, downloadAsTarGz, downloadSingleFile, type DownloadItem } from '@/lib/download';
 import type { Filters, ResolvedVersion } from '@/lib/modrinth/types';
 
 function getService(filters: Filters) {
@@ -165,7 +165,7 @@ export interface UseQueueReturn {
   remove:       (id: string) => void;
   retry:        (id: string) => void;
   clear:        () => void;
-  downloadZip:  (zipName: string) => Promise<void>;
+  downloadZip:  (zipName: string, format?: 'zip' | 'tar.gz') => Promise<void>;
 }
 
 export function useQueue(): UseQueueReturn {
@@ -262,7 +262,7 @@ export function useQueue(): UseQueueReturn {
     dispatch({ type: 'CLEAR' });
   }, []);
 
-  const downloadZip = useCallback(async (zipName: string) => {
+  const downloadZip = useCallback(async (zipName: string, format: 'zip' | 'tar.gz' = 'zip') => {
     const ready = state.entries.filter(
       (e): e is QueueEntry & { resolved: ResolvedVersion } =>
         e.status === 'ready' && e.resolved !== undefined,
@@ -293,9 +293,14 @@ export function useQueue(): UseQueueReturn {
       url:      e.resolved.file.url,
     }));
 
-    const failed = await downloadAsZip(
+    const downloadFn = format === 'tar.gz' ? downloadAsTarGz : downloadAsZip;
+    const archiveName = format === 'tar.gz'
+      ? (zipName.endsWith('.tar.gz') ? zipName : zipName + '.tar.gz')
+      : zipName;
+
+    const failed = await downloadFn(
       items,
-      zipName,
+      archiveName,
       (id, pct) => dispatch({ type: 'SET_PROGRESS', id, progress: pct }),
       (pct)     => dispatch({ type: 'SET_ZIP_PROGRESS', progress: pct }),
     );

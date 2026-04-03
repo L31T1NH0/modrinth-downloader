@@ -220,9 +220,18 @@ export default function Page() {
   // Holds a version locked by restore; prevents the versions-load effect from
   // overwriting it with releases[0] when it re-fires due to a source change.
   const restoredVersionRef = useRef<string | null>(null);
+  // Holds the version to preserve when switching between non-Bedrock sources.
+  const preservedVersionRef = useRef<string | null>(null);
 
   // ── Mobile panel ─────────────────────────────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
+
+  // ── Snackbar ──────────────────────────────────────────────────────────────
+  const [snackbar, setSnackbar] = useState<string | null>(null);
+  const snackbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Archive format ────────────────────────────────────────────────────────
+  const [archiveFormat, setArchiveFormat] = useState<'zip' | 'tar.gz'>('zip');
 
   // ── Fallback version tracking ─────────────────────────────────────────────
   const [fallbackVersion, setFallbackVersion] = useState<string | null>(null);
@@ -241,7 +250,10 @@ export default function Page() {
         if (releases.length) {
           const locked = restoredVersionRef.current;
           restoredVersionRef.current = null;
-          setFilters(prev => ({ ...prev, version: locked ?? releases[0] }));
+          const preserved = preservedVersionRef.current;
+          preservedVersionRef.current = null;
+          const preferred = locked ?? (preserved && releases.includes(preserved) ? preserved : null) ?? releases[0];
+          setFilters(prev => ({ ...prev, version: preferred }));
         }
       })
       .catch(() => { /* version list unavailable — search will stay paused */ });
@@ -355,6 +367,10 @@ export default function Page() {
       const toBedrockBoundary   = s === 'curseforge-bedrock' && !BEDROCK_CONTENT_TYPES.has(prev.contentType);
       const fromBedrockBoundary = s !== 'curseforge-bedrock' &&  BEDROCK_CONTENT_TYPES.has(prev.contentType);
       const contentType = toBedrockBoundary ? 'addon' : fromBedrockBoundary ? 'mod' : prev.contentType;
+      // Preserve the version when switching between non-Bedrock sources.
+      if (s !== 'curseforge-bedrock' && prev.source !== 'curseforge-bedrock' && prev.version) {
+        preservedVersionRef.current = prev.version;
+      }
       return { ...prev, source: s, contentType };
     });
   }, []);
@@ -383,6 +399,15 @@ export default function Page() {
       pluginLoader: ct === 'plugin' ? prev.pluginLoader : null,
     }));
   }, []);
+
+  // ── Snackbar: warn when Modrinth + datapack is selected ──────────────────
+  useEffect(() => {
+    if (filters.source === 'modrinth' && filters.contentType === 'datapack') {
+      if (snackbarTimerRef.current) clearTimeout(snackbarTimerRef.current);
+      setSnackbar('Use CurseForge instead; Modrinth datapacks are unreliable (may download mods instead)');
+      snackbarTimerRef.current = setTimeout(() => setSnackbar(null), 6000);
+    }
+  }, [filters.source, filters.contentType]);
 
   // ── Auto-select Bedrock on mobile (skipped when a share URL is present) ────
 
@@ -898,22 +923,43 @@ export default function Page() {
               <div className="mb-2 text-[10px] text-red-err text-center">{importError}</div>
             )}
 
-            <button
-              onClick={() => queue.downloadZip(zipName)}
-              disabled={queue.readyCount === 0 || queue.isDownloading}
-              className="w-full h-10 rounded-lg bg-brand border border-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover hover:border-brand-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {queue.isDownloading ? (
-                queue.entries.filter(e => e.status === 'downloading').length === 1
+            {queue.isDownloading ? (
+              <button
+                disabled
+                className="w-full h-10 rounded-lg bg-brand border border-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 opacity-40 cursor-not-allowed"
+              >
+                {queue.entries.filter(e => e.status === 'downloading').length === 1
                   ? <><Spinner size={13} /> Downloading... {queue.zipProgress}%</>
-                  : <><Spinner size={13} /> Creating ZIP... {queue.zipProgress}%</>
-              ) : (
-                <>
+                  : <><Spinner size={13} /> Creating {archiveFormat === 'tar.gz' ? '.tar.gz' : 'ZIP'}... {queue.zipProgress}%</>
+                }
+              </button>
+            ) : queue.readyCount > 1 ? (
+              <div className="flex w-full h-10 rounded-lg overflow-hidden border border-brand">
+                <button
+                  onClick={() => queue.downloadZip(zipName, archiveFormat)}
+                  className="flex-1 bg-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover active:scale-[0.98]"
+                >
                   <ArrowDownTrayIcon className="w-[13px] h-[13px]" />
-                  {queue.readyCount === 1 ? 'Download file' : `Download as ZIP (${queue.readyCount})`}
-                </>
-              )}
-            </button>
+                  Download {queue.readyCount} files
+                </button>
+                <button
+                  onClick={() => setArchiveFormat(f => f === 'zip' ? 'tar.gz' : 'zip')}
+                  title="Toggle archive format"
+                  className="px-3 bg-brand text-brand-dark text-[10px] font-mono font-semibold border-l border-black/20 hover:bg-brand-hover transition-colors"
+                >
+                  .{archiveFormat}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => queue.downloadZip(zipName, archiveFormat)}
+                disabled={queue.readyCount === 0}
+                className="w-full h-10 rounded-lg bg-brand border border-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover hover:border-brand-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ArrowDownTrayIcon className="w-[13px] h-[13px]" />
+                Download file
+              </button>
+            )}
 
             {/* ZIP progress bar */}
             {queue.isDownloading && (
@@ -949,6 +995,20 @@ export default function Page() {
           </div>
         </div>
       </div>
+
+      {/* ── Snackbar ─────────────────────────────────────────────────────── */}
+      {snackbar && (
+        <div className="fixed bottom-16 md:bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-amber-950/90 border border-amber-700/60 text-amber-300 text-xs shadow-lg backdrop-blur-sm max-w-sm w-[calc(100%-2rem)]">
+          <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-amber-400" />
+          <span className="flex-1">{snackbar}</span>
+          <button
+            onClick={() => setSnackbar(null)}
+            className="shrink-0 text-amber-500 hover:text-amber-300 transition-colors"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* ── Mobile bottom nav ────────────────────────────────────────────── */}
       <nav className="md:hidden shrink-0 flex border-t border-line-subtle bg-bg-base">
