@@ -490,9 +490,6 @@ export default function Page() {
     [queue.entries],
   );
 
-  /** ZIP filename derived from active source and content type. */
-  const zipName = `${filters.source}-${filters.contentType}s`;
-
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -936,7 +933,7 @@ export default function Page() {
             ) : queue.readyCount > 1 ? (
               <div className="flex w-full h-10 rounded-lg overflow-hidden border border-brand">
                 <button
-                  onClick={() => queue.downloadZip(zipName, archiveFormat)}
+                  onClick={() => queue.downloadZip(archiveFormat)}
                   className="flex-1 bg-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover active:scale-[0.98]"
                 >
                   <ArrowDownTrayIcon className="w-[13px] h-[13px]" />
@@ -952,7 +949,7 @@ export default function Page() {
               </div>
             ) : (
               <button
-                onClick={() => queue.downloadZip(zipName, archiveFormat)}
+                onClick={() => queue.downloadZip(archiveFormat)}
                 disabled={queue.readyCount === 0}
                 className="w-full h-10 rounded-lg bg-brand border border-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover hover:border-brand-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
               >

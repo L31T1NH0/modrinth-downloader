@@ -165,7 +165,7 @@ export interface UseQueueReturn {
   remove:       (id: string) => void;
   retry:        (id: string) => void;
   clear:        () => void;
-  downloadZip:  (zipName: string, format?: 'zip' | 'tar.gz') => Promise<void>;
+  downloadZip:  (format?: 'zip' | 'tar.gz') => Promise<void>;
 }
 
 export function useQueue(): UseQueueReturn {
@@ -262,7 +262,7 @@ export function useQueue(): UseQueueReturn {
     dispatch({ type: 'CLEAR' });
   }, []);
 
-  const downloadZip = useCallback(async (zipName: string, format: 'zip' | 'tar.gz' = 'zip') => {
+  const downloadZip = useCallback(async (format: 'zip' | 'tar.gz' = 'zip') => {
     const ready = state.entries.filter(
       (e): e is QueueEntry & { resolved: ResolvedVersion } =>
         e.status === 'ready' && e.resolved !== undefined,
@@ -272,41 +272,62 @@ export function useQueue(): UseQueueReturn {
     dispatch({ type: 'SET_DOWNLOADING', value: true });
     ready.forEach(e => dispatch({ type: 'SET_STATUS', id: e.id, status: 'downloading' }));
 
-    // Single file: download directly instead of bundling into a ZIP.
-    if (ready.length === 1) {
-      const entry = ready[0];
-      const ok = await downloadSingleFile(
-        { id: entry.id, filename: entry.resolved.file.filename, url: entry.resolved.file.url },
-        (id, pct) => {
-          dispatch({ type: 'SET_PROGRESS', id, progress: pct });
-          dispatch({ type: 'SET_ZIP_PROGRESS', progress: pct });
-        },
-      );
-      dispatch({ type: ok ? 'SET_STATUS' : 'ERROR', id: entry.id, ...(ok ? { status: 'done' } : { reason: 'network' }) } as QueueAction);
-      dispatch({ type: 'SET_DOWNLOADING', value: false });
-      return;
+    // Group entries by source + contentType so files from different tabs
+    // are never bundled into the same archive.
+    const groups = new Map<string, (QueueEntry & { resolved: ResolvedVersion })[]>();
+    for (const entry of ready) {
+      const key = `${entry.filters.source}-${entry.filters.contentType}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(entry);
     }
 
-    const items: DownloadItem[] = ready.map(e => ({
-      id:       e.id,
-      filename: e.resolved.file.filename,
-      url:      e.resolved.file.url,
-    }));
+    const totalFiles  = ready.length;
+    let filesComplete = 0;
+    const allFailed:  string[] = [];
 
-    const downloadFn = format === 'tar.gz' ? downloadAsTarGz : downloadAsZip;
-    const archiveName = format === 'tar.gz'
-      ? (zipName.endsWith('.tar.gz') ? zipName : zipName + '.tar.gz')
-      : zipName;
+    for (const [key, groupEntries] of groups) {
+      const items: DownloadItem[] = groupEntries.map(e => ({
+        id:       e.id,
+        filename: e.resolved.file.filename,
+        url:      e.resolved.file.url,
+      }));
 
-    const failed = await downloadFn(
-      items,
-      archiveName,
-      (id, pct) => dispatch({ type: 'SET_PROGRESS', id, progress: pct }),
-      (pct)     => dispatch({ type: 'SET_ZIP_PROGRESS', progress: pct }),
-    );
+      if (items.length === 1) {
+        // Single file in this group — download directly, no archive.
+        const entry = groupEntries[0];
+        const ok = await downloadSingleFile(
+          items[0],
+          (id, pct) => {
+            dispatch({ type: 'SET_PROGRESS', id, progress: pct });
+            const overall = Math.round(((filesComplete + pct / 100) / totalFiles) * 100);
+            dispatch({ type: 'SET_ZIP_PROGRESS', progress: overall });
+          },
+        );
+        if (!ok) allFailed.push(entry.id);
+        filesComplete += 1;
+        dispatch({ type: 'SET_ZIP_PROGRESS', progress: Math.round((filesComplete / totalFiles) * 100) });
+      } else {
+        // Multiple files in this group — bundle into an archive.
+        const archiveName = `${key}s`; // e.g. "modrinth-mods"
+        const downloadFn  = format === 'tar.gz' ? downloadAsTarGz : downloadAsZip;
+
+        const failed = await downloadFn(
+          items,
+          archiveName,
+          (id, pct) => dispatch({ type: 'SET_PROGRESS', id, progress: pct }),
+          (pct) => {
+            const groupProgress = (pct / 100) * items.length;
+            const overall = Math.round(((filesComplete + groupProgress) / totalFiles) * 100);
+            dispatch({ type: 'SET_ZIP_PROGRESS', progress: overall });
+          },
+        );
+        allFailed.push(...failed);
+        filesComplete += items.length;
+      }
+    }
 
     ready.forEach(e => {
-      if (failed.includes(e.id)) {
+      if (allFailed.includes(e.id)) {
         dispatch({ type: 'ERROR', id: e.id, reason: 'network' });
       } else {
         dispatch({ type: 'SET_STATUS', id: e.id, status: 'done' });
