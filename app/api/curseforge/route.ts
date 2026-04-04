@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { getRequestIp } from '@/lib/requestIp';
 
 const CF_BASE = 'https://api.curseforge.com/v1';
 
@@ -90,10 +91,7 @@ function isPathAllowed(path: string): { valid: true } | { valid: false; reason: 
 }
 
 export async function GET(request: NextRequest) {
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown';
+  const ip = getRequestIp(request);
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
     return NextResponse.json(
