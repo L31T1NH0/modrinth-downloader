@@ -102,47 +102,80 @@ function fromModrinthIndex(index: ModrinthIndex): ModListState | null {
  * - Modrinth index files (.mrpack index JSON) are validated separately via
  *   `isModrinthIndex` / `fromModrinthIndex` and always map to source "modrinth".
  *
- * Returns null for unknown schema versions or structurally invalid payloads so
- * callers can treat all failures uniformly without branching on error types.
+ * Returns null for unknown schema versions or structurally invalid payloads.
+ * Use `migrateWithDetails` when a caller needs a structured failure reason.
  */
 function migrate(raw: unknown): ModListState | null {
-  if (typeof raw !== 'object' || raw === null) return null;
-  const obj = raw as Record<string, unknown>;
+  const result = migrateWithDetails(raw);
+  return result.state;
+}
+
+function migrateWithDetails(raw: unknown): { state: ModListState | null; error?: string } {
+  if (typeof raw !== 'object' || raw === null) {
+    return { state: null, error: 'payload must be a JSON object' };
+  }
+
+  const obj = { ...(raw as Record<string, unknown>) };
+
+  // Normalize common aliases before explicit version blocks.
+  if (!Array.isArray(obj.mods) && Array.isArray(obj.projects)) obj.mods = obj.projects;
+  if (typeof obj.version !== 'string' && typeof obj.mcVersion === 'string') obj.version = obj.mcVersion;
+  if (obj.contentType === undefined) obj.contentType = 'mod';
+
+  // Infer v2 when formatVersion is omitted but core keys are present.
+  if (
+    obj.formatVersion === undefined &&
+    typeof obj.version === 'string' &&
+    typeof obj.source === 'string' &&
+    Array.isArray(obj.mods) &&
+    (obj.contentType === undefined || typeof obj.contentType === 'string')
+  ) {
+    obj.formatVersion = 2;
+  }
 
   if (obj.formatVersion === 1) {
-    if (
-      typeof obj.version === 'string' &&
-      typeof obj.loader  === 'string' &&
-      typeof obj.source  === 'string' &&
-      (obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock') &&
-      Array.isArray(obj.mods) &&
-      (obj.mods as unknown[]).every(m => typeof m === 'string')
-    ) {
+    if (typeof obj.version !== 'string') return { state: null, error: 'v1 requires "version" as string' };
+    if (typeof obj.loader !== 'string') return { state: null, error: 'v1 requires "loader" as string' };
+    if (typeof obj.source !== 'string') return { state: null, error: 'v1 requires "source" as string' };
+    if (!(obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock')) {
+      return { state: null, error: `v1 has unsupported "source": ${String(obj.source)}` };
+    }
+    if (!Array.isArray(obj.mods)) return { state: null, error: 'v1 requires "mods" as string[]' };
+    if (!(obj.mods as unknown[]).every(m => typeof m === 'string')) {
+      return { state: null, error: 'v1 "mods" must contain only strings' };
+    }
+
+    {
       const v1 = obj as unknown as ModListStateV1;
       const loader = v1.loader === 'forge' ? 'forge' : 'fabric';
-      return {
+      return { state: {
         formatVersion: CURRENT_FORMAT_VERSION,
         version: v1.version,
         source: v1.source,
         contentType: 'mod',
         loader,
         mods: v1.mods,
-      };
+      } };
     }
-    return null;
   }
 
   if (obj.formatVersion === 2) {
     const contentType = obj.contentType;
-    if (
-      typeof obj.version === 'string' &&
-      typeof obj.source  === 'string' &&
-      (obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock') &&
-      typeof contentType === 'string' &&
-      ['mod', 'plugin', 'datapack', 'resourcepack', 'shader', 'addon', 'map', 'texture-pack', 'script', 'skin'].includes(contentType) &&
-      Array.isArray(obj.mods) &&
-      (obj.mods as unknown[]).every(m => typeof m === 'string')
-    ) {
+    if (typeof obj.version !== 'string') return { state: null, error: 'v2 requires "version" as string' };
+    if (typeof obj.source !== 'string') return { state: null, error: 'v2 requires "source" as string' };
+    if (!(obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock')) {
+      return { state: null, error: `v2 has unsupported "source": ${String(obj.source)}` };
+    }
+    if (typeof contentType !== 'string') return { state: null, error: 'v2 requires "contentType" as string' };
+    if (!['mod', 'plugin', 'datapack', 'resourcepack', 'shader', 'addon', 'map', 'texture-pack', 'script', 'skin'].includes(contentType)) {
+      return { state: null, error: `v2 has unsupported "contentType": ${String(contentType)}` };
+    }
+    if (!Array.isArray(obj.mods)) return { state: null, error: 'v2 requires "mods" as string[]' };
+    if (!(obj.mods as unknown[]).every(m => typeof m === 'string')) {
+      return { state: null, error: 'v2 "mods" must contain only strings' };
+    }
+
+    {
       const base: ModListState = {
         formatVersion: CURRENT_FORMAT_VERSION,
         version: obj.version,
@@ -152,29 +185,31 @@ function migrate(raw: unknown): ModListState | null {
       };
 
       if (contentType === 'mod') {
-        return {
+        return { state: {
           ...base,
           loader: obj.loader === 'forge' ? 'forge' : 'fabric',
-        };
+        } };
       }
       if (contentType === 'shader') {
         const shaderLoader = obj.shaderLoader === 'optifine' ? 'optifine' : 'iris';
-        return { ...base, shaderLoader };
+        return { state: { ...base, shaderLoader } };
       }
       if (contentType === 'plugin') {
         const pluginLoader =
           obj.pluginLoader === 'bukkit' || obj.pluginLoader === 'spigot' || obj.pluginLoader === 'paper'
             ? obj.pluginLoader
             : 'paper';
-        return { ...base, pluginLoader };
+        return { state: { ...base, pluginLoader } };
       }
-      return base;
+      return { state: base };
     }
-    return null;
   }
 
   // Unknown schema version — refuse rather than silently misinterpret
-  return null;
+  if (obj.formatVersion === undefined) {
+    return { state: null, error: 'missing "formatVersion" and unable to infer v2' };
+  }
+  return { state: null, error: `unsupported "formatVersion": ${String(obj.formatVersion)}` };
 }
 
 // ─── Encode / decode ──────────────────────────────────────────────────────────
@@ -236,9 +271,16 @@ export function readJSONFile(file: File): Promise<ModListState> {
           resolve(state);
           return;
         }
-        const migrated = migrate(parsed);
-        if (!migrated) { reject(new Error('Invalid or unsupported ModListState schema')); return; }
-        resolve(migrated);
+        const migrated = migrateWithDetails(parsed);
+        if (!migrated.state) {
+          reject(
+            new Error(
+              `Formato não suportado. Esperado: ModListState v1/v2 (ou aliases compatíveis: projects/mods, mcVersion/version). Detalhe: ${migrated.error ?? 'estrutura inválida'}`,
+            ),
+          );
+          return;
+        }
+        resolve(migrated.state);
       } catch {
         reject(new Error('Invalid JSON'));
       }
