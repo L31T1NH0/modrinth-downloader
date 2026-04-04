@@ -911,7 +911,7 @@ export default function Page() {
                 const slbl        = statusLabel(entry.status);
                 return (
                   <div
-                    key={entry.id}
+                    key={entry.queueKey}
                     className="flex items-center gap-2.5 px-4 py-3 border-b border-line hover:bg-bg-hover transition-all duration-150 animate-slideIn"
                     style={{ animationDelay: `${i * 15}ms` }}
                   >
@@ -969,7 +969,7 @@ export default function Page() {
                       <div className="flex items-center gap-1 shrink-0">
                         {isError && (
                           <button
-                            onClick={() => queue.retry(entry.id)}
+                            onClick={() => queue.retry(entry.queueKey)}
                             className="text-ink-secondary hover:text-brand w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
                             title="Try again"
                           >
@@ -977,7 +977,7 @@ export default function Page() {
                           </button>
                         )}
                         <button
-                          onClick={() => queue.remove(entry.id)}
+                          onClick={() => queue.remove(entry.queueKey)}
                           className="text-ink-tertiary hover:text-ink-primary w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
                           title="Remove"
                         >
