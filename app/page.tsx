@@ -5,6 +5,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   CheckIcon,
+  CheckCircleIcon,
   XMarkIcon,
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
@@ -17,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { CloudArrowDownIcon } from '@heroicons/react/24/solid';
 import * as modrinthService from '@/lib/modrinth/service';
+import { TextClamp } from '@/components/TextClamp';
 import * as curseforgeService from '@/lib/curseforge/service';
 import type {
   Filters,
@@ -247,6 +249,10 @@ export default function Page() {
   // ── Snackbar ──────────────────────────────────────────────────────────────
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const snackbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Added-to-queue snackbar (mobile) ─────────────────────────────────────
+  const [addedSnackbar, setAddedSnackbar] = useState(false);
+  const addedSnackbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Archive format ────────────────────────────────────────────────────────
   const [archiveFormat, setArchiveFormat] = useState<'zip' | 'tar.gz'>(() => {
@@ -732,17 +738,34 @@ export default function Page() {
                       <ItemIcon url={item.icon_url} title={item.title} />
                       <div className="flex-1 min-w-0">
                         {item.page_url ? (
-                          <a
+                          <TextClamp
+                            as="a"
+                            text={item.title}
+                            font="600 13px Outfit"
+                            lineHeightPx={17}
+                            maxLines={2}
                             href={item.page_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[13px] font-semibold truncate leading-tight hover:underline hover:text-brand transition-colors"
+                            className="text-[13px] font-semibold leading-tight hover:underline hover:text-brand transition-colors"
                             onClick={e => e.stopPropagation()}
-                          >{item.title}</a>
+                          />
                         ) : (
-                          <div className="text-[13px] font-semibold truncate leading-tight">{item.title}</div>
+                          <TextClamp
+                            text={item.title}
+                            font="600 13px Outfit"
+                            lineHeightPx={17}
+                            maxLines={2}
+                            className="text-[13px] font-semibold leading-tight"
+                          />
                         )}
-                        <div className="text-xs text-ink-secondary mt-0.5 truncate leading-snug">{item.description}</div>
+                        <TextClamp
+                          text={item.description}
+                          font="400 12px Outfit"
+                          lineHeightPx={17}
+                          maxLines={2}
+                          className="text-xs text-ink-secondary mt-0.5 leading-snug"
+                        />
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-glow text-brand border border-brand/30 font-mono">
                             ⬇ {fmtDownloads(item.downloads)}
@@ -757,7 +780,12 @@ export default function Page() {
 
                       <button
                         disabled={queued}
-                        onClick={() => { queue.add(item.project_id, item.title, item.icon_url, filters); setMobilePanel('queue'); }}
+                        onClick={() => {
+                          queue.add(item.project_id, item.title, item.icon_url, filters);
+                          if (addedSnackbarTimerRef.current) clearTimeout(addedSnackbarTimerRef.current);
+                          setAddedSnackbar(true);
+                          addedSnackbarTimerRef.current = setTimeout(() => setAddedSnackbar(false), 2000);
+                        }}
                         className={[
                           'no-ring w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150 leading-none self-center',
                           queued && !isActive
@@ -844,7 +872,14 @@ export default function Page() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[12px] font-medium truncate">{entry.title}</span>
+                        <TextClamp
+                          as="span"
+                          text={entry.title}
+                          font="500 12px Outfit"
+                          lineHeightPx={18}
+                          maxLines={2}
+                          className="text-[12px] font-medium"
+                        />
                         {entry.isDependency && (
                           <span className="text-[9px] px-1 py-0.5 rounded bg-line-subtle text-ink-tertiary border border-line shrink-0">
                             dep
@@ -1042,6 +1077,14 @@ export default function Page() {
           </div>
         </div>
       </div>
+
+      {/* ── Added-to-queue snackbar ──────────────────────────────────────── */}
+      {addedSnackbar && (
+        <div className="fixed bottom-16 md:hidden left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-brand/10 border border-brand/30 text-brand text-xs shadow-lg backdrop-blur-sm max-w-sm w-[calc(100%-2rem)]">
+          <CheckCircleIcon className="w-4 h-4 shrink-0" />
+          <span className="flex-1">Added to queue</span>
+        </div>
+      )}
 
       {/* ── Snackbar ─────────────────────────────────────────────────────── */}
       {snackbar && (
