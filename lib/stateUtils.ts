@@ -7,7 +7,7 @@ interface ModListStateV1 {
   formatVersion: 1;
   version:       string;   // MC version e.g. "1.20.1"
   loader:        string;   // "fabric" | "forge"
-  source:        Source;   // "modrinth" | "curseforge"
+  source:        Source;   // "modrinth" | "curseforge" | "curseforge-bedrock"
   mods:          string[]; // project IDs — non-dependency entries only
 }
 
@@ -88,9 +88,22 @@ function fromModrinthIndex(index: ModrinthIndex): ModListState | null {
 // ─── Validation & migration ───────────────────────────────────────────────────
 
 /**
- * Validates and migrates any supported format version to the current schema.
- * Returns null for unrecognised or structurally invalid payloads so callers
- * can treat all failures uniformly without catching multiple error types.
+ * Validates and migrates any supported schema version to the current schema.
+ *
+ * Supported payloads by schema version:
+ * - schema v1 (formatVersion: 1):
+ *   - Custom ModListState payloads only.
+ *   - source: "modrinth" | "curseforge" | "curseforge-bedrock".
+ * - schema v2 (formatVersion: 2):
+ *   - Custom ModListState payloads only.
+ *   - source: "modrinth" | "curseforge" | "curseforge-bedrock".
+ *
+ * Related import format support:
+ * - Modrinth index files (.mrpack index JSON) are validated separately via
+ *   `isModrinthIndex` / `fromModrinthIndex` and always map to source "modrinth".
+ *
+ * Returns null for unknown schema versions or structurally invalid payloads so
+ * callers can treat all failures uniformly without branching on error types.
  */
 function migrate(raw: unknown): ModListState | null {
   if (typeof raw !== 'object' || raw === null) return null;
@@ -160,7 +173,7 @@ function migrate(raw: unknown): ModListState | null {
     return null;
   }
 
-  // Unknown formatVersion — refuse rather than silently misinterpret
+  // Unknown schema version — refuse rather than silently misinterpret
   return null;
 }
 
@@ -224,7 +237,7 @@ export function readJSONFile(file: File): Promise<ModListState> {
           return;
         }
         const migrated = migrate(parsed);
-        if (!migrated) { reject(new Error('Invalid or unsupported format')); return; }
+        if (!migrated) { reject(new Error('Invalid or unsupported ModListState schema')); return; }
         resolve(migrated);
       } catch {
         reject(new Error('Invalid JSON'));
