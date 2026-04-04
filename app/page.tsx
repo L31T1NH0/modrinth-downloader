@@ -245,6 +245,7 @@ export default function Page() {
 
   // ── Mobile panel ─────────────────────────────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
+  const [showMobileSourceSuggestion, setShowMobileSourceSuggestion] = useState(false);
 
   // ── Snackbar ──────────────────────────────────────────────────────────────
   const [snackbar, setSnackbar] = useState<string | null>(null);
@@ -431,6 +432,17 @@ export default function Page() {
     });
   }, []);
 
+  const dismissMobileSourceSuggestion = useCallback(() => {
+    setShowMobileSourceSuggestion(false);
+    try { localStorage.setItem('modrinth-dl:mobileSourceSuggestion', 'dismissed'); } catch { /* ignore */ }
+  }, []);
+
+  const acceptMobileSourceSuggestion = useCallback(() => {
+    setShowMobileSourceSuggestion(false);
+    try { localStorage.setItem('modrinth-dl:mobileSourceSuggestion', 'accepted'); } catch { /* ignore */ }
+    setSource('curseforge-bedrock');
+  }, [setSource]);
+
   const setVersion = useCallback((v: string) => {
     setFilters(prev => ({ ...prev, version: v }));
   }, []);
@@ -465,13 +477,23 @@ export default function Page() {
     }
   }, [filters.source, filters.contentType]);
 
-  // ── Auto-select Bedrock on mobile (skipped when a share URL is present) ────
+  // ── Suggest Bedrock on first mobile access (skipped with share URL) ───────
 
   useEffect(() => {
     const hasShareData = new URLSearchParams(window.location.search).has('data');
     if (hasShareData) return;
     const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-    if (isMobile) setSource('curseforge-bedrock');
+    if (!isMobile) return;
+    let decision: string | null = null;
+    try {
+      decision = localStorage.getItem('modrinth-dl:mobileSourceSuggestion');
+    } catch { /* ignore */ }
+    if (decision === 'accepted') {
+      setSource('curseforge-bedrock');
+      return;
+    }
+    if (decision === 'dismissed') return;
+    setShowMobileSourceSuggestion(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -673,6 +695,26 @@ export default function Page() {
                 }
               </button>
             </div>
+
+            {showMobileSourceSuggestion && (
+              <div className="w-full md:hidden rounded-md border border-brand/30 bg-brand-glow px-3 py-2 text-xs text-ink-secondary flex items-center justify-between gap-2">
+                <span>No mobile, Bedrock costuma funcionar melhor. Trocar agora?</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={dismissMobileSourceSuggestion}
+                    className="text-ink-secondary hover:text-ink-primary transition-colors"
+                  >
+                    Manter
+                  </button>
+                  <button
+                    onClick={acceptMobileSourceSuggestion}
+                    className="h-6 px-2 rounded bg-brand border border-brand text-brand-dark hover:bg-brand-hover transition-colors"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Results list */}
