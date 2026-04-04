@@ -5,7 +5,7 @@ import { checkRateLimit } from '@/lib/rateLimit';
 const ALLOWED_HOSTS = ['edge.forgecdn.net', 'mediafilez.forgecdn.net'];
 
 export async function GET(request: NextRequest) {
-  const ip = request.ip ?? request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
     return NextResponse.json(
