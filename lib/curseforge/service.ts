@@ -158,7 +158,7 @@ export async function searchProjects(
  *
  * Returns a typed ResolveResult — never throws:
  *  { ok: true, version }  — file found and downloadUrl is non-null
- *  { ok: false, reason }  — 'no_compatible_version' or 'network'
+ *  { ok: false, reason }  — 'no_compatible_version' or inferred failure reason
  */
 export async function resolveProjectVersion(
   projectId: string,
@@ -178,7 +178,11 @@ export async function resolveProjectVersion(
     }
 
     const r = await fetch(cfProxy(`/mods/${projectId}/files?${params}`));
-    if (!r.ok) return { ok: false, reason: 'network' };
+    if (!r.ok) {
+      if (r.status === 404) return { ok: false, reason: 'not_found' };
+      if (r.status === 429) return { ok: false, reason: 'rate_limited' };
+      return { ok: false, reason: 'network' };
+    }
 
     const data: CfFilesResponse = await r.json();
     if (!data.data.length) return { ok: false, reason: 'no_compatible_version' };

@@ -74,6 +74,11 @@ export interface ProjectInfo {
   iconUrl: string | null;
 }
 
+export type FailureReason =
+  | 'network'
+  | 'not_found'
+  | 'rate_limited';
+
 /**
  * Discriminated union returned by `resolveProjectVersion`.
  * Using a typed result (instead of throwing) for predictable failure modes
@@ -81,4 +86,4 @@ export interface ProjectInfo {
  */
 export type ResolveResult =
   | { ok: true;  version: ResolvedVersion }
-  | { ok: false; reason: 'no_compatible_version' | 'network' };
+  | { ok: false; reason: 'no_compatible_version' | FailureReason };

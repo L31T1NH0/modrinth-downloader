@@ -124,7 +124,7 @@ export async function searchProjects(
  *
  * Returns a typed ResolveResult — never throws:
  *  { ok: true, version }  — file resolved; version includes dependency list
- *  { ok: false, reason }  — 'no_compatible_version' or 'network'
+ *  { ok: false, reason }  — 'no_compatible_version' or inferred failure reason
  */
 export async function resolveProjectVersion(
   projectId: string,
@@ -133,7 +133,11 @@ export async function resolveProjectVersion(
   try {
     const params = buildVersionParams(filters);
     const r = await fetch(`${BASE}/project/${projectId}/version?${params}`);
-    if (!r.ok) return { ok: false, reason: 'network' };
+    if (!r.ok) {
+      if (r.status === 404) return { ok: false, reason: 'not_found' };
+      if (r.status === 429) return { ok: false, reason: 'rate_limited' };
+      return { ok: false, reason: 'network' };
+    }
 
     const vers: Array<{
       version_number: string;
