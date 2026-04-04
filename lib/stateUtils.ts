@@ -25,6 +25,18 @@ export interface ModListStateV2 {
 export type ModListState = ModListStateV2;
 
 const CURRENT_FORMAT_VERSION = 2;
+const CONTENT_TYPE_COMPATIBILITY: Record<ContentType, Source[]> = {
+  mod: ['modrinth', 'curseforge'],
+  plugin: ['modrinth'],
+  datapack: ['modrinth', 'curseforge'],
+  resourcepack: ['modrinth', 'curseforge'],
+  shader: ['modrinth', 'curseforge'],
+  addon: ['curseforge-bedrock'],
+  map: ['curseforge-bedrock'],
+  'texture-pack': ['curseforge-bedrock'],
+  script: ['curseforge-bedrock'],
+  skin: ['curseforge-bedrock'],
+};
 
 /**
  * Conservative limit for the encoded ?data= payload.
@@ -110,7 +122,10 @@ function migrate(raw: unknown): ModListState | null {
   return result.state;
 }
 
-function migrateWithDetails(raw: unknown): { state: ModListState | null; error?: string } {
+function migrateWithDetails(
+  raw: unknown,
+  options?: { autoCorrectInvalidPair?: boolean },
+): { state: ModListState | null; error?: string; warning?: string } {
   if (typeof raw !== 'object' || raw === null) {
     return { state: null, error: 'payload must be a JSON object' };
   }
@@ -160,7 +175,7 @@ function migrateWithDetails(raw: unknown): { state: ModListState | null; error?:
   }
 
   if (obj.formatVersion === 2) {
-    const contentType = obj.contentType;
+    let contentType = obj.contentType;
     if (typeof obj.version !== 'string') return { state: null, error: 'v2 requires "version" as string' };
     if (typeof obj.source !== 'string') return { state: null, error: 'v2 requires "source" as string' };
     if (!(obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock')) {
@@ -174,27 +189,58 @@ function migrateWithDetails(raw: unknown): { state: ModListState | null; error?:
     if (!(obj.mods as unknown[]).every(m => typeof m === 'string')) {
       return { state: null, error: 'v2 "mods" must contain only strings' };
     }
+    const source = obj.source as Source;
+    let normalizedContentType = contentType as ContentType;
+    const allowedSources = CONTENT_TYPE_COMPATIBILITY[normalizedContentType];
+    if (!allowedSources.includes(source)) {
+      const pair = `source="${source}" + contentType="${String(contentType)}"`;
+      if (options?.autoCorrectInvalidPair) {
+        normalizedContentType = 'mod';
+        const fallbackAllowedSources = CONTENT_TYPE_COMPATIBILITY[normalizedContentType];
+        if (!fallbackAllowedSources.includes(source)) {
+          return {
+            state: null,
+            error: `v2 invalid combination: ${pair}; fallback contentType="mod" is not supported for source="${source}"`,
+          };
+        }
+        return {
+          state: {
+            formatVersion: CURRENT_FORMAT_VERSION,
+            version: obj.version,
+            source,
+            contentType: normalizedContentType,
+            loader: obj.loader === 'forge' ? 'forge' : 'fabric',
+            mods: obj.mods as string[],
+          },
+          warning: `Par inválido ${pair}. Autocorreção aplicada para contentType="mod".`,
+        };
+      }
+      return {
+        state: null,
+        error: `v2 invalid combination: ${pair}. Allowed for "${String(contentType)}": ${allowedSources.join(', ')}`,
+      };
+    }
 
     {
       const base: ModListState = {
         formatVersion: CURRENT_FORMAT_VERSION,
         version: obj.version,
-        source: obj.source as Source,
-        contentType: contentType as ContentType,
+        source,
+        contentType: normalizedContentType,
         mods: obj.mods as string[],
       };
 
-      if (contentType === 'mod') {
+      if (normalizedContentType === 'mod') {
         return { state: {
           ...base,
           loader: obj.loader === 'forge' ? 'forge' : 'fabric',
         } };
       }
-      if (contentType === 'shader') {
+      if (normalizedContentType === 'shader') {
         const shaderLoader = obj.shaderLoader === 'optifine' ? 'optifine' : 'iris';
         return { state: { ...base, shaderLoader } };
       }
-      if (contentType === 'plugin') {
+      if (normalizedContentType === 'plugin') {
         const pluginLoader =
           obj.pluginLoader === 'bukkit' || obj.pluginLoader === 'spigot' || obj.pluginLoader === 'paper'
             ? obj.pluginLoader
@@ -271,7 +317,7 @@ export function readJSONFile(file: File): Promise<ModListState> {
           resolve(state);
           return;
         }
-        const migrated = migrateWithDetails(parsed);
+        const migrated = migrateWithDetails(parsed, { autoCorrectInvalidPair: true });
         if (!migrated.state) {
           reject(
             new Error(
@@ -279,6 +325,9 @@ export function readJSONFile(file: File): Promise<ModListState> {
             ),
           );
           return;
+        }
+        if (migrated.warning) {
+          console.warn(`[readJSONFile] ${migrated.warning}`);
         }
         resolve(migrated.state);
       } catch {
