@@ -140,6 +140,28 @@ Arquivos críticos:
 - **Datapacks**: Apenas versão do Minecraft
 - **Resourcepacks**: Apenas versão do Minecraft
 
+
+## ⚙️ Operação: IP real atrás de proxy/CDN
+
+As rotas da CurseForge (`/api/curseforge` e `/api/curseforge/download`) aplicam rate limit por IP do cliente.
+Para isso, o backend considera **apenas headers de IP confiáveis** nesta ordem:
+
+1. `cf-connecting-ip`
+2. `true-client-ip`
+3. `x-real-ip`
+4. `x-forwarded-for` (primeiro IP da lista)
+
+Configure sua borda para encaminhar o IP real e remover valores forjados vindos do cliente.
+
+### Proxies/CDNs recomendados
+
+- **Cloudflare**: encaminhar `CF-Connecting-IP` (padrão da plataforma).
+- **Fastly / Akamai**: encaminhar `True-Client-IP` (quando habilitado).
+- **Nginx / Ingress Nginx / Traefik / HAProxy / ALB**: definir `X-Real-IP` e cadeia `X-Forwarded-For` corretamente.
+- **Vercel / Reverse proxy interno**: garantir que o proxy de borda preserve `X-Forwarded-For` e que a aplicação não fique exposta diretamente sem esse proxy.
+
+> Se nenhum header confiável estiver presente, o sistema usa `unknown` como origem para rate limit.
+
 ## 🎨 Customização
 
 ### Tema Tailwind
