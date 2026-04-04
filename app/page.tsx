@@ -499,11 +499,16 @@ export default function Page() {
   const getExportState = useCallback(() =>
     buildExportState(
       filters.version,
-      filters.loader,
       filters.source,
+      filters.contentType,
       queue.entries.filter(e => !e.isDependency).map(e => e.id),
+      {
+        loader: filters.loader,
+        shaderLoader: filters.shaderLoader,
+        pluginLoader: filters.pluginLoader,
+      },
     ),
-  [filters.version, filters.loader, filters.source, queue.entries]);
+  [filters.version, filters.loader, filters.source, filters.contentType, filters.shaderLoader, filters.pluginLoader, queue.entries]);
 
   const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -70,10 +70,10 @@ export function useRestoreMods(
     const restoredFilters: Filters = {
       source:       state.source,
       version:      state.version,
-      contentType:  'mod',
+      contentType:  state.contentType,
       loader,
-      shaderLoader: null,
-      pluginLoader: null,
+      shaderLoader: state.contentType === 'shader' ? (state.shaderLoader ?? 'iris') : null,
+      pluginLoader: state.contentType === 'plugin' ? (state.pluginLoader ?? 'paper') : null,
     };
 
     // Apply filters and clear queue before starting async work so the UI

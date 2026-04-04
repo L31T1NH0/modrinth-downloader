@@ -1,9 +1,9 @@
 import * as LZString from 'lz-string';
-import type { Source } from '@/lib/modrinth/types';
+import type { Source, ContentType, Loader, ShaderLoader, PluginLoader } from '@/lib/modrinth/types';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
-export interface ModListState {
+interface ModListStateV1 {
   formatVersion: 1;
   version:       string;   // MC version e.g. "1.20.1"
   loader:        string;   // "fabric" | "forge"
@@ -11,7 +11,20 @@ export interface ModListState {
   mods:          string[]; // project IDs — non-dependency entries only
 }
 
-const CURRENT_FORMAT_VERSION = 1;
+export interface ModListStateV2 {
+  formatVersion: 2;
+  version:       string;
+  source:        Source;
+  contentType:   ContentType;
+  loader?:       Loader;
+  shaderLoader?: ShaderLoader;
+  pluginLoader?: PluginLoader;
+  mods:          string[];
+}
+
+export type ModListState = ModListStateV2;
+
+const CURRENT_FORMAT_VERSION = 2;
 
 /**
  * Conservative limit for the encoded ?data= payload.
@@ -62,7 +75,14 @@ function fromModrinthIndex(index: ModrinthIndex): ModListState | null {
 
   if (mods.length === 0) return null;
 
-  return { formatVersion: CURRENT_FORMAT_VERSION, version: mcVersion, loader, source: 'modrinth', mods };
+  return {
+    formatVersion: CURRENT_FORMAT_VERSION,
+    version: mcVersion,
+    source: 'modrinth',
+    contentType: 'mod',
+    loader: loader as Loader,
+    mods,
+  };
 }
 
 // ─── Validation & migration ───────────────────────────────────────────────────
@@ -85,7 +105,57 @@ function migrate(raw: unknown): ModListState | null {
       Array.isArray(obj.mods) &&
       (obj.mods as unknown[]).every(m => typeof m === 'string')
     ) {
-      return obj as unknown as ModListState;
+      const v1 = obj as unknown as ModListStateV1;
+      const loader = v1.loader === 'forge' ? 'forge' : 'fabric';
+      return {
+        formatVersion: CURRENT_FORMAT_VERSION,
+        version: v1.version,
+        source: v1.source,
+        contentType: 'mod',
+        loader,
+        mods: v1.mods,
+      };
+    }
+    return null;
+  }
+
+  if (obj.formatVersion === 2) {
+    const contentType = obj.contentType;
+    if (
+      typeof obj.version === 'string' &&
+      typeof obj.source  === 'string' &&
+      (obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock') &&
+      typeof contentType === 'string' &&
+      ['mod', 'plugin', 'datapack', 'resourcepack', 'shader', 'addon', 'map', 'texture-pack', 'script', 'skin'].includes(contentType) &&
+      Array.isArray(obj.mods) &&
+      (obj.mods as unknown[]).every(m => typeof m === 'string')
+    ) {
+      const base: ModListState = {
+        formatVersion: CURRENT_FORMAT_VERSION,
+        version: obj.version,
+        source: obj.source as Source,
+        contentType: contentType as ContentType,
+        mods: obj.mods as string[],
+      };
+
+      if (contentType === 'mod') {
+        return {
+          ...base,
+          loader: obj.loader === 'forge' ? 'forge' : 'fabric',
+        };
+      }
+      if (contentType === 'shader') {
+        const shaderLoader = obj.shaderLoader === 'optifine' ? 'optifine' : 'iris';
+        return { ...base, shaderLoader };
+      }
+      if (contentType === 'plugin') {
+        const pluginLoader =
+          obj.pluginLoader === 'bukkit' || obj.pluginLoader === 'spigot' || obj.pluginLoader === 'paper'
+            ? obj.pluginLoader
+            : 'paper';
+        return { ...base, pluginLoader };
+      }
+      return base;
     }
     return null;
   }
@@ -170,9 +240,28 @@ export function readJSONFile(file: File): Promise<ModListState> {
 /** Constructs a ModListState from the current UI context. */
 export function buildExportState(
   version: string,
-  loader:  string,
   source:  Source,
+  contentType: ContentType,
   modIds:  string[],
+  context?: {
+    loader?: Loader;
+    shaderLoader?: ShaderLoader | null;
+    pluginLoader?: PluginLoader | null;
+  },
 ): ModListState {
-  return { formatVersion: CURRENT_FORMAT_VERSION, version, loader, source, mods: modIds };
+  const state: ModListState = {
+    formatVersion: CURRENT_FORMAT_VERSION,
+    version,
+    source,
+    contentType,
+    mods: modIds,
+  };
+  if (contentType === 'mod') {
+    state.loader = context?.loader ?? 'fabric';
+  } else if (contentType === 'shader' && context?.shaderLoader) {
+    state.shaderLoader = context.shaderLoader;
+  } else if (contentType === 'plugin' && context?.pluginLoader) {
+    state.pluginLoader = context.pluginLoader;
+  }
+  return state;
 }
