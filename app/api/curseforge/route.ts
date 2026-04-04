@@ -12,7 +12,10 @@ const ALLOWED_PREFIXES = [
 ];
 
 export async function GET(request: NextRequest) {
-  const ip = request.ip ?? request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown';
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
     return NextResponse.json(
