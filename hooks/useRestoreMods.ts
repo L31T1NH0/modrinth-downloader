@@ -66,47 +66,53 @@ export function useRestoreMods(
     if (inProgressRef.current) return;
     inProgressRef.current = true;
 
-    const loader: Loader = state.loader === 'forge' ? 'forge' : 'fabric';
-    const restoredFilters: Filters = {
-      source:       state.source,
-      version:      state.version,
-      contentType:  state.contentType,
-      loader,
-      shaderLoader: state.contentType === 'shader' ? (state.shaderLoader ?? 'iris') : null,
-      pluginLoader: state.contentType === 'plugin' ? (state.pluginLoader ?? 'paper') : null,
-    };
+    try {
+      const loader: Loader = state.loader === 'forge' ? 'forge' : 'fabric';
+      const restoredFilters: Filters = {
+        source:       state.source,
+        version:      state.version,
+        contentType:  state.contentType,
+        loader,
+        shaderLoader: state.contentType === 'shader' ? (state.shaderLoader ?? 'iris') : null,
+        pluginLoader: state.contentType === 'plugin' ? (state.pluginLoader ?? 'paper') : null,
+      };
 
-    // Apply filters and clear queue before starting async work so the UI
-    // immediately reflects the new context even while metadata is loading.
-    setFilters(restoredFilters);
-    queue.clear();
-    setIsRestoring(true);
-    setFailedCount(null);
+      // Apply filters and clear queue before starting async work so the UI
+      // immediately reflects the new context even while metadata is loading.
+      setFilters(restoredFilters);
+      queue.clear();
+      setIsRestoring(true);
+      setFailedCount(null);
 
-    const service = state.source === 'modrinth' ? modrinthService : curseforgeService;
+      const service = state.source === 'modrinth' ? modrinthService : curseforgeService;
 
-    // Work exclusively from incoming state.mods — not from current queue entries,
-    // which were just cleared and could be stale under any concurrent scenario.
-    const results = await mapWithConcurrency(
-      state.mods,
-      FETCH_CONCURRENCY,
-      id => service.fetchProjectInfo(id),
-    );
+      // Work exclusively from incoming state.mods — not from current queue entries,
+      // which were just cleared and could be stale under any concurrent scenario.
+      const results = await mapWithConcurrency(
+        state.mods,
+        FETCH_CONCURRENCY,
+        id => service.fetchProjectInfo(id),
+      );
 
-    let failed = 0;
-    results.forEach((result, i) => {
-      if (result.status === 'fulfilled') {
-        const { title, iconUrl } = result.value;
-        // queue.add deduplicates by project ID — safe to call unconditionally
-        queue.add(state.mods[i], title, iconUrl, restoredFilters);
-      } else {
-        failed++;
-      }
-    });
+      let failed = 0;
+      results.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+          const { title, iconUrl } = result.value;
+          // queue.add deduplicates by project ID — safe to call unconditionally
+          queue.add(state.mods[i], title, iconUrl, restoredFilters);
+        } else {
+          failed++;
+        }
+      });
 
-    setFailedCount(failed);
-    setIsRestoring(false);
-    inProgressRef.current = false;
+      setFailedCount(failed);
+      setIsRestoring(false);
+    } catch {
+      setIsRestoring(false);
+      setFailedCount(prev => prev ?? state.mods.length);
+    } finally {
+      inProgressRef.current = false;
+    }
   }, [queue, setFilters]);
 
   return { isRestoring, failedCount, restoreMods };
