@@ -17,7 +17,7 @@ Uma aplicação web moderna para buscar, resolver dependências e baixar mods, s
 
 ### Requisitos
 
-- Node.js 18+ 
+- Node.js 20+
 - npm ou yarn
 
 ### Instalação
@@ -77,13 +77,22 @@ modrinth-downloader/
 
 ## 🛠 Tecnologias
 
-- **Next.js 15** - Framework React moderno
-- **React 19** - Biblioteca UI
-- **TypeScript** - Tipagem estática
-- **Tailwind CSS** - Estilização utilitária
-- **fflate** - Compressão ZIP em tempo real
+- **Next.js 16** - Framework React moderno
+- **React 19** (`react` + `react-dom`) - Biblioteca UI
+- **TypeScript 6** - Tipagem estática
+- **Tailwind CSS 4** (`tailwindcss` + `@tailwindcss/postcss`) - Estilização utilitária
+- **PostCSS 8** - Pipeline CSS
+- **fflate 0** - Compressão ZIP em tempo real
+- **lz-string 1** - Compactação de strings para payloads/client state
+- **@heroicons/react 2** - Ícones SVG para interface
 - **API Modrinth v2** - Integração com Modrinth
 - **API CurseForge** - Integração com CurseForge
+
+## 🔁 Matriz de Compatibilidade
+
+- **Runtime Node suportado**: **Node.js 20+**.
+- **Stack principal**: **Next.js 16** + **React 19** (`react-dom` 19).
+- **Última revisão da documentação**: **2026-04-04**.
 
 ## 📚 Como Usar
 
@@ -157,6 +166,10 @@ Ajuste `next.config.ts` conforme necessário para suas necessidades específicas
 ## 🤝 Contribuições
 
 Contribuições são bem-vindas! Sinta-se livre para abrir issues e pull requests.
+
+### Checklist de PR
+
+- [ ] Atualizou documentação de stack se houve mudança de versão major.
 
 ## 📮 Suporte
 
