@@ -28,6 +28,7 @@ import type {
   ContentType,
   Source,
   SearchResult,
+  SearchPage,
 } from '@/lib/modrinth/types';
 import { useQueue, type QueueItemStatus } from '@/hooks/useQueue';
 import { useRestoreMods } from '@/hooks/useRestoreMods';
@@ -42,6 +43,10 @@ const SEARCH_FALLBACK_LIMITS = {
   maxTermSimplifications: 1,
   maxVersionFallbacks: 2,
 } as const;
+const SEARCH_DEBOUNCE_MS = 400;
+const MIN_QUERY_LENGTH = 2;
+const SEARCH_CACHE_TTL_MS = 60_000;
+const SEARCH_RATE_LIMIT = { maxRequests: 6, windowMs: 10_000 } as const;
 
 type SearchFallbackDebugMeta = {
   requestId: number;
@@ -54,6 +59,11 @@ type SearchFallbackDebugMeta = {
   versionFallbackTried: string[];
   strategy: 'none' | 'term-simplification' | 'version-fallback';
   resultedInHits: boolean;
+};
+
+type SearchFetchContext = {
+  service: typeof modrinthService | typeof curseforgeService;
+  signal: AbortSignal;
 };
 
 // ─── UI configuration ─────────────────────────────────────────────────────────
@@ -234,8 +244,16 @@ export default function Page() {
   const abortRef    = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rateLimitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cacheRef = useRef<Map<string, { expiresAt: number; page: SearchPage }>>(new Map());
+  const inflightRef = useRef<Map<string, Promise<SearchPage>>>(new Map());
+  const requestTimestampsRef = useRef<number[]>([]);
+  const queuedSearchRef = useRef<{ query: string; snapshot: Filters; startOffset: number; append: boolean; interactionId: number } | null>(null);
+  const fallbackUsageByInteractionRef = useRef<Map<number, boolean>>(new Map());
+  const interactionIdRef = useRef(0);
   const animatedIds = useRef<Set<string>>(new Set());
   const [searchDebugMeta, setSearchDebugMeta] = useState<SearchFallbackDebugMeta | null>(null);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
   // ── Queue ─────────────────────────────────────────────────────────────────
   const queue = useQueue();
@@ -322,11 +340,62 @@ export default function Page() {
 
   // ── Core search ───────────────────────────────────────────────────────────
 
+  const buildSearchKey = useCallback((query: string, snapshot: Filters, startOffset: number) => {
+    const loaderScope = snapshot.contentType === 'mod'
+      ? snapshot.loader
+      : snapshot.contentType === 'shader'
+        ? snapshot.shaderLoader ?? ''
+        : snapshot.contentType === 'plugin'
+          ? snapshot.pluginLoader ?? ''
+          : '';
+    return [
+      snapshot.source,
+      snapshot.contentType,
+      snapshot.version,
+      loaderScope,
+      query,
+      String(startOffset),
+    ].join('|');
+  }, []);
+
+  const fetchSearchPage = useCallback(async (
+    query: string,
+    snapshot: Filters,
+    startOffset: number,
+    ctx: SearchFetchContext,
+  ): Promise<SearchPage> => {
+    const key = buildSearchKey(query, snapshot, startOffset);
+    const now = Date.now();
+    const cached = cacheRef.current.get(key);
+    if (cached && cached.expiresAt > now) {
+      return cached.page;
+    }
+
+    const inflight = inflightRef.current.get(key);
+    if (inflight) {
+      return inflight;
+    }
+
+    const reqPromise = ctx.service
+      .searchProjects(query, snapshot, startOffset, ctx.signal)
+      .then(page => {
+        cacheRef.current.set(key, { expiresAt: Date.now() + SEARCH_CACHE_TTL_MS, page });
+        return page;
+      })
+      .finally(() => {
+        inflightRef.current.delete(key);
+      });
+
+    inflightRef.current.set(key, reqPromise);
+    return reqPromise;
+  }, [buildSearchKey]);
+
   const runSearch = useCallback(async (
     query:       string,
     snapshot:    Filters,
     startOffset: number,
     append:      boolean,
+    interactionId: number,
   ) => {
     if (!snapshot.version) return;
 
@@ -337,7 +406,6 @@ export default function Page() {
 
     if (!append) {
       setIsLoading(true);
-      setHasError(false);
       setOffset(0);
       activeRef.current = { query, filters: snapshot };
       animatedIds.current.clear();
@@ -350,16 +418,19 @@ export default function Page() {
     try {
       const service = snapshot.source === 'modrinth' ? modrinthService : curseforgeService;
       const signal = ctrl.signal;
-      let page      = await service.searchProjects(query, snapshot, startOffset, signal);
+      const fetchContext: SearchFetchContext = { service, signal };
+      let page      = await fetchSearchPage(query, snapshot, startOffset, fetchContext);
       let usedVersion = snapshot.version;
       let executedQuery = query;
       let termSimplificationAttempts = 0;
       let versionFallbackAttempts = 0;
       const versionFallbackTried: string[] = [];
       let strategy: SearchFallbackDebugMeta['strategy'] = 'none';
+      const canUseFallback = !append && !fallbackUsageByInteractionRef.current.get(interactionId);
 
       // Fallback 1: multi-word query with no hits → retry with longest single term (1 extra call)
       if (
+        canUseFallback &&
         !append &&
         page.hits.length === 0 &&
         query.includes(' ') &&
@@ -369,11 +440,17 @@ export default function Page() {
         termSimplificationAttempts = 1;
         strategy = 'term-simplification';
         executedQuery = term;
-        page = await service.searchProjects(term, snapshot, 0, signal);
+        page = await fetchSearchPage(term, snapshot, 0, fetchContext);
+        fallbackUsageByInteractionRef.current.set(interactionId, true);
       }
 
       // Fallback 2: still no results → try configured amount of immediately older versions
-      if (!append && page.hits.length === 0) {
+      if (
+        canUseFallback &&
+        !fallbackUsageByInteractionRef.current.get(interactionId) &&
+        !append &&
+        page.hits.length === 0
+      ) {
         const currentIdx = versions.indexOf(snapshot.version);
         const start = currentIdx >= 0 ? currentIdx + 1 : 0;
         const end = Math.min(start + SEARCH_FALLBACK_LIMITS.maxVersionFallbacks, versions.length);
@@ -381,17 +458,18 @@ export default function Page() {
           const fallbackSnapshot = { ...snapshot, version: versions[i] };
           versionFallbackAttempts += 1;
           versionFallbackTried.push(versions[i]);
-          page = await service.searchProjects(executedQuery, fallbackSnapshot, 0, signal);
+          page = await fetchSearchPage(executedQuery, fallbackSnapshot, 0, fetchContext);
           if (page.hits.length > 0) {
             usedVersion = versions[i];
             setFallbackVersion(versions[i]);
             strategy = 'version-fallback';
+            fallbackUsageByInteractionRef.current.set(interactionId, true);
             break;
           }
         }
       }
 
-      if (abortRef.current !== ctrl) return;
+      if (abortRef.current !== ctrl || requestIdRef.current !== requestId) return;
 
       if (append) {
         setResults(prev => [...prev, ...page.hits]);
@@ -399,6 +477,10 @@ export default function Page() {
         setOffset(next);
         setHasMore(next < page.totalHits);
       } else {
+        const appliedFilters = usedVersion !== snapshot.version
+          ? { ...snapshot, version: usedVersion }
+          : snapshot;
+        activeRef.current = { query: executedQuery, filters: appliedFilters };
         setResults(page.hits);
         setOffset(page.hits.length);
         setHasMore(page.hits.length < page.totalHits);
@@ -417,7 +499,7 @@ export default function Page() {
       }
       setHasError(false);
     } catch (e) {
-      if (abortRef.current !== ctrl) return;
+      if (abortRef.current !== ctrl || requestIdRef.current !== requestId) return;
       if ((e as Error).name !== 'AbortError') setHasError(true);
     } finally {
       if (abortRef.current === ctrl) {
@@ -425,37 +507,87 @@ export default function Page() {
         else        setIsLoading(false);
       }
     }
-  }, [versions]);
+  }, [fetchSearchPage, versions]);
+
+  const scheduleSearch = useCallback((
+    query: string,
+    snapshot: Filters,
+    startOffset: number,
+    append: boolean,
+    interactionId: number,
+  ) => {
+    const now = Date.now();
+    requestTimestampsRef.current = requestTimestampsRef.current
+      .filter(ts => now - ts < SEARCH_RATE_LIMIT.windowMs);
+
+    if (requestTimestampsRef.current.length < SEARCH_RATE_LIMIT.maxRequests) {
+      requestTimestampsRef.current.push(now);
+      setIsRateLimited(false);
+      void runSearch(query, snapshot, startOffset, append, interactionId);
+      return;
+    }
+
+    queuedSearchRef.current = { query, snapshot, startOffset, append, interactionId };
+    if (rateLimitTimeoutRef.current) return;
+
+    setIsRateLimited(true);
+    const oldest = requestTimestampsRef.current[0];
+    const waitMs = Math.max(SEARCH_RATE_LIMIT.windowMs - (now - oldest), 100);
+    rateLimitTimeoutRef.current = setTimeout(() => {
+      rateLimitTimeoutRef.current = null;
+      const queued = queuedSearchRef.current;
+      queuedSearchRef.current = null;
+      if (!queued) {
+        setIsRateLimited(false);
+        return;
+      }
+      scheduleSearch(queued.query, queued.snapshot, queued.startOffset, queued.append, queued.interactionId);
+    }, waitMs);
+  }, [runSearch]);
 
   // Re-fetch on filter change; clears query to show browse mode.
   useEffect(() => {
     if (!filters.version) return;
     setSearchQuery('');
-    runSearch('', filters, 0, false);
+    interactionIdRef.current += 1;
+    fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
+    scheduleSearch('', filters, 0, false, interactionIdRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.source, filters.version, filters.contentType, filters.loader, filters.shaderLoader, filters.pluginLoader, runSearch]);
+  }, [filters.source, filters.version, filters.contentType, filters.loader, filters.shaderLoader, filters.pluginLoader, scheduleSearch]);
 
   // ── Search actions ────────────────────────────────────────────────────────
 
   const triggerSearch = useCallback(() => {
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
-    runSearch(searchQuery.trim(), filters, 0, false);
-  }, [runSearch, searchQuery, filters]);
+    const trimmed = searchQuery.trim();
+    if (trimmed && trimmed.length < MIN_QUERY_LENGTH) return;
+    interactionIdRef.current += 1;
+    fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
+    scheduleSearch(trimmed, filters, 0, false, interactionIdRef.current);
+  }, [scheduleSearch, searchQuery, filters]);
 
   const handleQueryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
     if (!filters.version) return;
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
-    if (!val.trim()) {
-      runSearch('', filters, 0, false);
+    const trimmed = val.trim();
+    if (!trimmed) {
+      if (activeRef.current.query === '') return;
+      interactionIdRef.current += 1;
+      fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
+      scheduleSearch('', filters, 0, false, interactionIdRef.current);
     } else {
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
-        runSearch(val.trim(), filters, 0, false);
-      }, 400);
+        const next = val.trim();
+        if (!next || next.length < MIN_QUERY_LENGTH) return;
+        interactionIdRef.current += 1;
+        fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
+        scheduleSearch(next, filters, 0, false, interactionIdRef.current);
+      }, SEARCH_DEBOUNCE_MS);
     }
-  }, [runSearch, filters]);
+  }, [scheduleSearch, filters]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') triggerSearch(); },
@@ -465,13 +597,24 @@ export default function Page() {
   const clearSearch = useCallback(() => {
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setSearchQuery('');
-    runSearch('', filters, 0, false);
-  }, [runSearch, filters]);
+    if (activeRef.current.query === '') return;
+    interactionIdRef.current += 1;
+    fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
+    scheduleSearch('', filters, 0, false, interactionIdRef.current);
+  }, [scheduleSearch, filters]);
 
   const loadMore = useCallback(() => {
     const { query, filters: f } = activeRef.current;
-    runSearch(query, f, offset, true);
-  }, [runSearch, offset]);
+    interactionIdRef.current += 1;
+    fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
+    scheduleSearch(query, f, offset, true, interactionIdRef.current);
+  }, [scheduleSearch, offset]);
+
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (rateLimitTimeoutRef.current) clearTimeout(rateLimitTimeoutRef.current);
+    abortRef.current?.abort();
+  }, []);
 
   // ── Filter setters ────────────────────────────────────────────────────────
 
@@ -742,7 +885,7 @@ export default function Page() {
               </div>
               <button
                 onClick={triggerSearch}
-                disabled={isLoading}
+                disabled={isLoading || (!!searchQuery.trim() && searchQuery.trim().length < MIN_QUERY_LENGTH)}
                 className="h-7 w-7 rounded-md bg-brand border border-brand text-brand-dark flex items-center justify-center shrink-0 transition-all hover:bg-brand-hover active:scale-95 disabled:opacity-50"
               >
                 {isLoading
@@ -769,6 +912,18 @@ export default function Page() {
                     Trocar
                   </button>
                 </div>
+              </div>
+            )}
+
+            {!!searchQuery.trim() && searchQuery.trim().length < MIN_QUERY_LENGTH && (
+              <div className="w-full text-[10px] text-ink-tertiary">
+                Type at least {MIN_QUERY_LENGTH} characters to search.
+              </div>
+            )}
+
+            {isRateLimited && (
+              <div className="w-full text-[10px] text-amber-300">
+                Aguardando nova busca…
               </div>
             )}
           </div>
