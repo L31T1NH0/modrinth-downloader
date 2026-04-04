@@ -4,6 +4,7 @@ export interface DownloadItem {
   id:       string;
   filename: string;
   url:      string;
+  sizeBytes?: number | null;
 }
 
 interface FetchedFile {
@@ -90,18 +91,21 @@ export async function downloadAsZip(
   onItemProgress:    (id: string, pct: number) => void,
   onOverallProgress: (pct: number) => void,
 ): Promise<string[]> {
+  const prioritizedItems = [...items].sort(
+    (a, b) => (a.sizeBytes ?? Number.POSITIVE_INFINITY) - (b.sizeBytes ?? Number.POSITIVE_INFINITY),
+  );
   const succeeded: FetchedFile[] = [];
   const failed:    string[]      = [];
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
+  for (let i = 0; i < prioritizedItems.length; i++) {
+    const item = prioritizedItems[i];
     try {
       const f = await fetchFile(item, pct => onItemProgress(item.id, pct));
       succeeded.push(f);
     } catch {
       failed.push(item.id);
     }
-    onOverallProgress(Math.round(((i + 1) / items.length) * 85));
+    onOverallProgress(Math.round(((i + 1) / prioritizedItems.length) * 85));
   }
 
   if (succeeded.length === 0) return failed;
@@ -202,18 +206,21 @@ export async function downloadAsTarGz(
   onItemProgress:    (id: string, pct: number) => void,
   onOverallProgress: (pct: number) => void,
 ): Promise<string[]> {
+  const prioritizedItems = [...items].sort(
+    (a, b) => (a.sizeBytes ?? Number.POSITIVE_INFINITY) - (b.sizeBytes ?? Number.POSITIVE_INFINITY),
+  );
   const succeeded: FetchedFile[] = [];
   const failed:    string[]      = [];
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
+  for (let i = 0; i < prioritizedItems.length; i++) {
+    const item = prioritizedItems[i];
     try {
       const f = await fetchFile(item, pct => onItemProgress(item.id, pct));
       succeeded.push(f);
     } catch {
       failed.push(item.id);
     }
-    onOverallProgress(Math.round(((i + 1) / items.length) * 85));
+    onOverallProgress(Math.round(((i + 1) / prioritizedItems.length) * 85));
   }
 
   if (succeeded.length === 0) return failed;

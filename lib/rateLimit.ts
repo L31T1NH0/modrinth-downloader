@@ -1,5 +1,5 @@
 const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 50;
+const MAX_REQUESTS = 400;
 
 const store = new Map<string, number[]>();
 let lastCleanup = Date.now();
