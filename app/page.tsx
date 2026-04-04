@@ -38,6 +38,23 @@ import {
 import { CustomSelect } from '@/components/CustomSelect';
 
 const PAGE_SIZE = modrinthService.PAGE_SIZE;
+const SEARCH_FALLBACK_LIMITS = {
+  maxTermSimplifications: 1,
+  maxVersionFallbacks: 2,
+} as const;
+
+type SearchFallbackDebugMeta = {
+  requestId: number;
+  originalQuery: string;
+  executedQuery: string;
+  originalVersion: string;
+  usedVersion: string;
+  termSimplificationAttempts: number;
+  versionFallbackAttempts: number;
+  versionFallbackTried: string[];
+  strategy: 'none' | 'term-simplification' | 'version-fallback';
+  resultedInHits: boolean;
+};
 
 // ─── UI configuration ─────────────────────────────────────────────────────────
 
@@ -215,8 +232,10 @@ export default function Page() {
     query: '', filters: DEFAULT_FILTERS,
   });
   const abortRef    = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animatedIds = useRef<Set<string>>(new Set());
+  const [searchDebugMeta, setSearchDebugMeta] = useState<SearchFallbackDebugMeta | null>(null);
 
   // ── Queue ─────────────────────────────────────────────────────────────────
   const queue = useQueue();
@@ -311,46 +330,68 @@ export default function Page() {
   ) => {
     if (!snapshot.version) return;
 
+    const requestId = ++requestIdRef.current;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     if (!append) {
-      abortRef.current?.abort();
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
       setIsLoading(true);
       setHasError(false);
       setOffset(0);
       activeRef.current = { query, filters: snapshot };
       animatedIds.current.clear();
       setFallbackVersion(null);
+      setSearchDebugMeta(null);
     } else {
       setIsLoadingMore(true);
     }
 
     try {
       const service = snapshot.source === 'modrinth' ? modrinthService : curseforgeService;
-      const signal  = append ? undefined : abortRef.current?.signal;
+      const signal = ctrl.signal;
       let page      = await service.searchProjects(query, snapshot, startOffset, signal);
       let usedVersion = snapshot.version;
+      let executedQuery = query;
+      let termSimplificationAttempts = 0;
+      let versionFallbackAttempts = 0;
+      const versionFallbackTried: string[] = [];
+      let strategy: SearchFallbackDebugMeta['strategy'] = 'none';
 
       // Fallback 1: multi-word query with no hits → retry with longest single term (1 extra call)
-      if (!append && page.hits.length === 0 && query.includes(' ')) {
+      if (
+        !append &&
+        page.hits.length === 0 &&
+        query.includes(' ') &&
+        SEARCH_FALLBACK_LIMITS.maxTermSimplifications > 0
+      ) {
         const term = query.split(/\s+/).sort((a, b) => b.length - a.length)[0];
+        termSimplificationAttempts = 1;
+        strategy = 'term-simplification';
+        executedQuery = term;
         page = await service.searchProjects(term, snapshot, 0, signal);
       }
 
-      // Fallback 2: still no results → try up to 3 immediately older versions
+      // Fallback 2: still no results → try configured amount of immediately older versions
       if (!append && page.hits.length === 0) {
         const currentIdx = versions.indexOf(snapshot.version);
-        const end = Math.min(currentIdx + 4, versions.length);
-        for (let i = currentIdx + 1; i < end; i++) {
+        const start = currentIdx >= 0 ? currentIdx + 1 : 0;
+        const end = Math.min(start + SEARCH_FALLBACK_LIMITS.maxVersionFallbacks, versions.length);
+        for (let i = start; i < end; i++) {
           const fallbackSnapshot = { ...snapshot, version: versions[i] };
-          page = await service.searchProjects(query, fallbackSnapshot, 0, signal);
+          versionFallbackAttempts += 1;
+          versionFallbackTried.push(versions[i]);
+          page = await service.searchProjects(executedQuery, fallbackSnapshot, 0, signal);
           if (page.hits.length > 0) {
             usedVersion = versions[i];
             setFallbackVersion(versions[i]);
+            strategy = 'version-fallback';
             break;
           }
         }
       }
+
+      if (abortRef.current !== ctrl) return;
 
       if (append) {
         setResults(prev => [...prev, ...page.hits]);
@@ -361,13 +402,28 @@ export default function Page() {
         setResults(page.hits);
         setOffset(page.hits.length);
         setHasMore(page.hits.length < page.totalHits);
+        setSearchDebugMeta({
+          requestId,
+          originalQuery: query,
+          executedQuery,
+          originalVersion: snapshot.version,
+          usedVersion,
+          termSimplificationAttempts,
+          versionFallbackAttempts,
+          versionFallbackTried,
+          strategy,
+          resultedInHits: page.hits.length > 0,
+        });
       }
       setHasError(false);
     } catch (e) {
+      if (abortRef.current !== ctrl) return;
       if ((e as Error).name !== 'AbortError') setHasError(true);
     } finally {
-      if (append) setIsLoadingMore(false);
-      else        setIsLoading(false);
+      if (abortRef.current === ctrl) {
+        if (append) setIsLoadingMore(false);
+        else        setIsLoading(false);
+      }
     }
   }, [versions]);
 
@@ -760,6 +816,11 @@ export default function Page() {
                     <><br />with {filters.version}</>
                   )}
                 </span>
+                {searchDebugMeta && (
+                  <div className="mt-2 rounded-md border border-line-subtle bg-bg-surface px-2 py-1 text-[10px] text-ink-tertiary">
+                    debug: strategy={searchDebugMeta.strategy}, termFallbacks={searchDebugMeta.termSimplificationAttempts}, versionFallbacks={searchDebugMeta.versionFallbackAttempts}
+                  </div>
+                )}
               </div>
             )}
 
