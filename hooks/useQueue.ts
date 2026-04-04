@@ -266,7 +266,7 @@ export function useQueue(): UseQueueReturn {
     const ready = state.entries.filter(
       (e): e is QueueEntry & { resolved: ResolvedVersion } =>
         e.status === 'ready' && e.resolved !== undefined,
-    );
+    ).sort((a, b) => a.resolved.file.size - b.resolved.file.size);
     if (!ready.length || state.isDownloading) return;
 
     dispatch({ type: 'SET_DOWNLOADING', value: true });
@@ -290,6 +290,7 @@ export function useQueue(): UseQueueReturn {
         id:       e.id,
         filename: e.resolved.file.filename,
         url:      e.resolved.file.url,
+        sizeBytes: e.resolved.file.size,
       }));
 
       if (items.length === 1) {
