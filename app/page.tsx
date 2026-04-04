@@ -192,7 +192,14 @@ export default function Page() {
   const [versions, setVersions] = useState<string[]>([]);
 
   // ── Active filters ────────────────────────────────────────────────────────
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<Filters>(() => {
+    if (typeof window === 'undefined') return DEFAULT_FILTERS;
+    try {
+      const saved = localStorage.getItem('modrinth-dl:filters');
+      if (saved) return { ...DEFAULT_FILTERS, ...JSON.parse(saved), version: '' };
+    } catch { /* ignore */ }
+    return DEFAULT_FILTERS;
+  });
 
   // ── Search state ──────────────────────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState('');
@@ -205,7 +212,8 @@ export default function Page() {
   const activeRef = useRef<{ query: string; filters: Filters }>({
     query: '', filters: DEFAULT_FILTERS,
   });
-  const abortRef  = useRef<AbortController | null>(null);
+  const abortRef    = useRef<AbortController | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animatedIds = useRef<Set<string>>(new Set());
 
   // ── Queue ─────────────────────────────────────────────────────────────────
@@ -221,7 +229,17 @@ export default function Page() {
   // overwriting it with releases[0] when it re-fires due to a source change.
   const restoredVersionRef = useRef<string | null>(null);
   // Holds the version to preserve when switching between non-Bedrock sources.
-  const preservedVersionRef = useRef<string | null>(null);
+  const preservedVersionRef = useRef<string | null>(
+    typeof window !== 'undefined'
+      ? (() => {
+          try {
+            const saved = localStorage.getItem('modrinth-dl:filters');
+            if (saved) return (JSON.parse(saved) as Filters).version ?? null;
+          } catch { /* ignore */ }
+          return null;
+        })()
+      : null,
+  );
 
   // ── Mobile panel ─────────────────────────────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
@@ -231,7 +249,23 @@ export default function Page() {
   const snackbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Archive format ────────────────────────────────────────────────────────
-  const [archiveFormat, setArchiveFormat] = useState<'zip' | 'tar.gz'>('zip');
+  const [archiveFormat, setArchiveFormat] = useState<'zip' | 'tar.gz'>(() => {
+    if (typeof window === 'undefined') return 'zip';
+    try {
+      const saved = localStorage.getItem('modrinth-dl:archiveFormat');
+      if (saved === 'zip' || saved === 'tar.gz') return saved;
+    } catch { /* ignore */ }
+    return 'zip';
+  });
+
+  // ── Persist user decisions ────────────────────────────────────────────────
+  useEffect(() => {
+    try { localStorage.setItem('modrinth-dl:filters', JSON.stringify(filters)); } catch { /* ignore */ }
+  }, [filters]);
+
+  useEffect(() => {
+    try { localStorage.setItem('modrinth-dl:archiveFormat', archiveFormat); } catch { /* ignore */ }
+  }, [archiveFormat]);
 
   // ── Fallback version tracking ─────────────────────────────────────────────
   const [fallbackVersion, setFallbackVersion] = useState<string | null>(null);
@@ -290,24 +324,23 @@ export default function Page() {
       let page      = await service.searchProjects(query, snapshot, startOffset, signal);
       let usedVersion = snapshot.version;
 
-      // Fallback to older versions if no results found on fresh search
+      // Fallback 1: multi-word query with no hits → retry with longest single term (1 extra call)
+      if (!append && page.hits.length === 0 && query.includes(' ')) {
+        const term = query.split(/\s+/).sort((a, b) => b.length - a.length)[0];
+        page = await service.searchProjects(term, snapshot, 0, signal);
+      }
+
+      // Fallback 2: still no results → try up to 3 immediately older versions
       if (!append && page.hits.length === 0) {
         const currentIdx = versions.indexOf(snapshot.version);
-        console.log('No results for version:', snapshot.version, 'Index:', currentIdx, 'Total versions:', versions.length);
-        // Try older versions (next indices, since versions are sorted newest-first)
-        if (currentIdx >= 0 && currentIdx < versions.length - 1) {
-          for (let i = currentIdx + 1; i < versions.length; i++) {
-            const prevVersion = versions[i];
-            console.log('Trying fallback version:', prevVersion);
-            const fallbackSnapshot = { ...snapshot, version: prevVersion };
-            page = await service.searchProjects(query, fallbackSnapshot, 0, signal);
-            console.log('Fallback results:', page.hits.length);
-            if (page.hits.length > 0) {
-              usedVersion = prevVersion;
-              setFallbackVersion(prevVersion);
-              console.log('Found results in:', prevVersion);
-              break;
-            }
+        const end = Math.min(currentIdx + 4, versions.length);
+        for (let i = currentIdx + 1; i < end; i++) {
+          const fallbackSnapshot = { ...snapshot, version: versions[i] };
+          page = await service.searchProjects(query, fallbackSnapshot, 0, signal);
+          if (page.hits.length > 0) {
+            usedVersion = versions[i];
+            setFallbackVersion(versions[i]);
+            break;
           }
         }
       }
@@ -342,8 +375,24 @@ export default function Page() {
   // ── Search actions ────────────────────────────────────────────────────────
 
   const triggerSearch = useCallback(() => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     runSearch(searchQuery.trim(), filters, 0, false);
   }, [runSearch, searchQuery, filters]);
+
+  const handleQueryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    if (!filters.version) return;
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    if (!val.trim()) {
+      runSearch('', filters, 0, false);
+    } else {
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        runSearch(val.trim(), filters, 0, false);
+      }, 400);
+    }
+  }, [runSearch, filters]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') triggerSearch(); },
@@ -351,6 +400,7 @@ export default function Page() {
   );
 
   const clearSearch = useCallback(() => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setSearchQuery('');
     runSearch('', filters, 0, false);
   }, [runSearch, filters]);
@@ -586,7 +636,7 @@ export default function Page() {
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
+                  onChange={handleQueryChange}
                   onKeyDown={handleKeyDown}
                   placeholder={`Search items...`}
                   className="w-full h-7 pl-8 pr-2 rounded text-ink-primary text-xs placeholder:text-ink-tertiary transition-colors focus:ring-2 focus:ring-brand focus:outline-none bg-bg-surface"

@@ -1,9 +1,19 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 /** Allowlist of hostnames from which we will proxy CurseForge file downloads. */
 const ALLOWED_HOSTS = ['edge.forgecdn.net', 'mediafilez.forgecdn.net'];
 
 export async function GET(request: NextRequest) {
+  const ip = request.ip ?? request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const limit = checkRateLimit(ip);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+    );
+  }
+
   const rawUrl = new URL(request.url).searchParams.get('url');
 
   if (!rawUrl) {

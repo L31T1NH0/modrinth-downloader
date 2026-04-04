@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 const CF_BASE = 'https://api.curseforge.com/v1';
 
@@ -11,6 +12,15 @@ const ALLOWED_PREFIXES = [
 ];
 
 export async function GET(request: NextRequest) {
+  const ip = request.ip ?? request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const limit = checkRateLimit(ip);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+    );
+  }
+
   const apiKey = process.env.CURSEFORGE_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
