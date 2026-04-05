@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, KeyboardEvent } from 'react';
+import { flushSync } from 'react-dom';
 import {
   MagnifyingGlassIcon,
   PlusIcon,
@@ -37,6 +38,11 @@ import {
   type ModListState,
 } from '@/lib/stateUtils';
 import { CustomSelect } from '@/components/CustomSelect';
+import { Skeleton, configureBoneyard } from 'boneyard-js/react';
+import { DebugPanel } from '@/components/DebugPanel';
+import { captureEvent } from '@/lib/debugCapture';
+
+configureBoneyard({ color: '#1f2d3d', animate: 'pulse' });
 
 const PAGE_SIZE = modrinthService.PAGE_SIZE;
 const SEARCH_FALLBACK_LIMITS = {
@@ -46,7 +52,6 @@ const SEARCH_FALLBACK_LIMITS = {
 const SEARCH_DEBOUNCE_MS = 400;
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_CACHE_TTL_MS = 60_000;
-const SEARCH_RATE_LIMIT = { maxRequests: 6, windowMs: 10_000 } as const;
 
 type SearchFallbackDebugMeta = {
   requestId: number;
@@ -213,6 +218,63 @@ function PillToggle<T extends string>({
   );
 }
 
+// ─── Search result skeleton (boneyard) ───────────────────────────────────────
+
+/** Rendered only during `npx boneyard-js build` so the CLI can capture real bone positions. */
+function MockSearchResultCard() {
+  return (
+    <div className="flex items-start gap-3 px-4 py-3.5 border-b border-line">
+      <div className="w-10 h-10 rounded-lg bg-bg-surface border border-line-subtle shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-semibold leading-tight">Fabric API</div>
+        <div className="text-xs text-ink-secondary mt-0.5 leading-snug">
+          Core API library for the Fabric toolchain, providing common hooks and interoperability utilities
+        </div>
+        <div className="flex gap-1.5 mt-1.5">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-glow text-brand border border-brand/30 font-mono">⬇ 12.5M</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-surface text-ink-secondary border border-line-subtle">library</span>
+        </div>
+      </div>
+      <div className="w-8 h-8 rounded-lg shrink-0 self-center" />
+    </div>
+  );
+}
+
+/** CSS fallback row shown before `npx boneyard-js build` has been run. */
+function SkeletonFallbackRow() {
+  return (
+    <div className="flex items-start gap-3 px-4 py-3.5 border-b border-line animate-pulse">
+      <div className="w-10 h-10 rounded-lg bg-line-subtle shrink-0" />
+      <div className="flex-1 min-w-0 py-0.5">
+        <div className="h-3 rounded bg-line-subtle w-36" />
+        <div className="h-2.5 rounded bg-line-subtle mt-2 w-48" />
+        <div className="h-2.5 rounded bg-line-subtle mt-1 w-3/4" />
+        <div className="flex gap-1.5 mt-2.5">
+          <div className="h-4 w-10 rounded bg-line-subtle" />
+          <div className="h-4 w-14 rounded bg-line-subtle" />
+        </div>
+      </div>
+      <div className="w-8 h-8 rounded-lg bg-line-subtle shrink-0 self-center" />
+    </div>
+  );
+}
+
+function SearchResultSkeletons() {
+  return (
+    <div>
+      {Array.from({ length: 8 }, (_, i) => (
+        <Skeleton
+          key={i}
+          name="search-result-card"
+          loading={true}
+          fixture={<MockSearchResultCard />}
+          fallback={<SkeletonFallbackRow />}
+        >{null}</Skeleton>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Page() {
@@ -221,18 +283,11 @@ export default function Page() {
   const [versions, setVersions] = useState<string[]>([]);
 
   // ── Active filters ────────────────────────────────────────────────────────
-  const [filters, setFilters] = useState<Filters>(() => {
-    if (typeof window === 'undefined') return DEFAULT_FILTERS;
-    try {
-      const saved = localStorage.getItem('modrinth-dl:filters');
-      if (saved) return { ...DEFAULT_FILTERS, ...JSON.parse(saved), version: '' };
-    } catch { /* ignore */ }
-    return DEFAULT_FILTERS;
-  });
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
 
   // ── Search state ──────────────────────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState('');
-  const [isLoading,     setIsLoading]     = useState(false);
+  const [isSearching,   setIsSearching]   = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasError,      setHasError]      = useState(false);
   const [results,       setResults]       = useState<SearchResult[]>([]);
@@ -244,16 +299,12 @@ export default function Page() {
   const abortRef    = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rateLimitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cacheRef = useRef<Map<string, { expiresAt: number; page: SearchPage }>>(new Map());
   const inflightRef = useRef<Map<string, Promise<SearchPage>>>(new Map());
-  const requestTimestampsRef = useRef<number[]>([]);
-  const queuedSearchRef = useRef<{ query: string; snapshot: Filters; startOffset: number; append: boolean; interactionId: number } | null>(null);
   const fallbackUsageByInteractionRef = useRef<Map<number, boolean>>(new Map());
   const interactionIdRef = useRef(0);
   const animatedIds = useRef<Set<string>>(new Set());
   const [searchDebugMeta, setSearchDebugMeta] = useState<SearchFallbackDebugMeta | null>(null);
-  const [isRateLimited, setIsRateLimited] = useState(false);
 
   // ── Queue ─────────────────────────────────────────────────────────────────
   const queue = useQueue();
@@ -268,17 +319,7 @@ export default function Page() {
   // overwriting it with releases[0] when it re-fires due to a source change.
   const restoredVersionRef = useRef<string | null>(null);
   // Holds the version to preserve when switching between non-Bedrock sources.
-  const preservedVersionRef = useRef<string | null>(
-    typeof window !== 'undefined'
-      ? (() => {
-          try {
-            const saved = localStorage.getItem('modrinth-dl:filters');
-            if (saved) return (JSON.parse(saved) as Filters).version ?? null;
-          } catch { /* ignore */ }
-          return null;
-        })()
-      : null,
-  );
+  const preservedVersionRef = useRef<string | null>(null);
 
   // ── Mobile panel ─────────────────────────────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
@@ -293,14 +334,7 @@ export default function Page() {
   const addedSnackbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Archive format ────────────────────────────────────────────────────────
-  const [archiveFormat, setArchiveFormat] = useState<'zip' | 'tar.gz'>(() => {
-    if (typeof window === 'undefined') return 'zip';
-    try {
-      const saved = localStorage.getItem('modrinth-dl:archiveFormat');
-      if (saved === 'zip' || saved === 'tar.gz') return saved;
-    } catch { /* ignore */ }
-    return 'zip';
-  });
+  const [archiveFormat, setArchiveFormat] = useState<'zip' | 'tar.gz'>('zip');
 
   // ── Persist user decisions ────────────────────────────────────────────────
   useEffect(() => {
@@ -311,12 +345,30 @@ export default function Page() {
     try { localStorage.setItem('modrinth-dl:archiveFormat', archiveFormat); } catch { /* ignore */ }
   }, [archiveFormat]);
 
+  // ── Restore persisted state from localStorage (client-only, runs before versions fetch) ──
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('modrinth-dl:filters');
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<Filters>;
+        preservedVersionRef.current = parsed.version ?? null;
+        setFilters(prev => ({ ...prev, ...parsed, version: '' }));
+      }
+    } catch { /* ignore */ }
+    try {
+      const savedFormat = localStorage.getItem('modrinth-dl:archiveFormat');
+      if (savedFormat === 'zip' || savedFormat === 'tar.gz') setArchiveFormat(savedFormat);
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Fallback version tracking ─────────────────────────────────────────────
   const [fallbackVersion, setFallbackVersion] = useState<string | null>(null);
 
   // ── Load MC versions (re-fetched when source changes) ────────────────────
 
   useEffect(() => {
+    let cancelled = false;
     setVersions([]);
     setFilters(prev => ({ ...prev, version: '' }));
     const fetchVersions = filters.source === 'modrinth'
@@ -324,6 +376,7 @@ export default function Page() {
       : curseforgeService.fetchGameVersions(filters.source);
     fetchVersions
       .then(releases => {
+        if (cancelled) return;
         setVersions(releases);
         if (releases.length) {
           const locked = restoredVersionRef.current;
@@ -335,6 +388,7 @@ export default function Page() {
         }
       })
       .catch(() => { /* version list unavailable — search will stay paused */ });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.source]);
 
@@ -363,16 +417,19 @@ export default function Page() {
     snapshot: Filters,
     startOffset: number,
     ctx: SearchFetchContext,
+    meta: { cacheHit: boolean },
   ): Promise<SearchPage> => {
     const key = buildSearchKey(query, snapshot, startOffset);
     const now = Date.now();
     const cached = cacheRef.current.get(key);
     if (cached && cached.expiresAt > now) {
+      meta.cacheHit = true;
       return cached.page;
     }
 
     const inflight = inflightRef.current.get(key);
     if (inflight) {
+      meta.cacheHit = true;
       return inflight;
     }
 
@@ -404,8 +461,10 @@ export default function Page() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    const t0 = performance.now();
+
     if (!append) {
-      setIsLoading(true);
+      setIsSearching(true);
       setOffset(0);
       activeRef.current = { query, filters: snapshot };
       animatedIds.current.clear();
@@ -419,7 +478,8 @@ export default function Page() {
       const service = snapshot.source === 'modrinth' ? modrinthService : curseforgeService;
       const signal = ctrl.signal;
       const fetchContext: SearchFetchContext = { service, signal };
-      let page      = await fetchSearchPage(query, snapshot, startOffset, fetchContext);
+      const fetchMeta = { cacheHit: false };
+      let page      = await fetchSearchPage(query, snapshot, startOffset, fetchContext, fetchMeta);
       let usedVersion = snapshot.version;
       let executedQuery = query;
       let termSimplificationAttempts = 0;
@@ -440,7 +500,7 @@ export default function Page() {
         termSimplificationAttempts = 1;
         strategy = 'term-simplification';
         executedQuery = term;
-        page = await fetchSearchPage(term, snapshot, 0, fetchContext);
+        page = await fetchSearchPage(term, snapshot, 0, fetchContext, fetchMeta);
         fallbackUsageByInteractionRef.current.set(interactionId, true);
       }
 
@@ -458,7 +518,7 @@ export default function Page() {
           const fallbackSnapshot = { ...snapshot, version: versions[i] };
           versionFallbackAttempts += 1;
           versionFallbackTried.push(versions[i]);
-          page = await fetchSearchPage(executedQuery, fallbackSnapshot, 0, fetchContext);
+          page = await fetchSearchPage(executedQuery, fallbackSnapshot, 0, fetchContext, fetchMeta);
           if (page.hits.length > 0) {
             usedVersion = versions[i];
             setFallbackVersion(versions[i]);
@@ -471,79 +531,98 @@ export default function Page() {
 
       if (abortRef.current !== ctrl || requestIdRef.current !== requestId) return;
 
+      const durationMs = Math.round(performance.now() - t0);
+      const loaderScope = snapshot.contentType === 'mod' ? snapshot.loader
+        : snapshot.contentType === 'shader' ? snapshot.shaderLoader
+        : snapshot.contentType === 'plugin' ? snapshot.pluginLoader
+        : null;
+
       if (append) {
         setResults(prev => [...prev, ...page.hits]);
         const next = startOffset + page.hits.length;
         setOffset(next);
         setHasMore(next < page.totalHits);
+        captureEvent({ type: 'load_more', ts: Date.now(), offset: startOffset, resultCount: page.hits.length, durationMs });
       } else {
         const appliedFilters = usedVersion !== snapshot.version
           ? { ...snapshot, version: usedVersion }
           : snapshot;
-        activeRef.current = { query: executedQuery, filters: appliedFilters };
-        setResults(page.hits);
-        setOffset(page.hits.length);
-        setHasMore(page.hits.length < page.totalHits);
-        setSearchDebugMeta({
-          requestId,
-          originalQuery: query,
-          executedQuery,
-          originalVersion: snapshot.version,
-          usedVersion,
-          termSimplificationAttempts,
-          versionFallbackAttempts,
-          versionFallbackTried,
-          strategy,
-          resultedInHits: page.hits.length > 0,
+        const commitResults = () => {
+          activeRef.current = { query: executedQuery, filters: appliedFilters };
+          setResults(page.hits);
+          setOffset(page.hits.length);
+          setHasMore(page.hits.length < page.totalHits);
+          setSearchDebugMeta({
+            requestId,
+            originalQuery: query,
+            executedQuery,
+            originalVersion: snapshot.version,
+            usedVersion,
+            termSimplificationAttempts,
+            versionFallbackAttempts,
+            versionFallbackTried,
+            strategy,
+            resultedInHits: page.hits.length > 0,
+          });
+        };
+        if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+          (document as Document & { startViewTransition(cb: () => void): unknown })
+            .startViewTransition(() => flushSync(commitResults));
+        } else {
+          commitResults();
+        }
+
+        captureEvent({
+          type: 'search',
+          ts: Date.now(),
+          query: executedQuery,
+          source: snapshot.source,
+          version: usedVersion,
+          contentType: snapshot.contentType,
+          loader: loaderScope,
+          durationMs,
+          resultCount: page.hits.length,
+          totalHits: page.totalHits,
+          cacheHit: fetchMeta.cacheHit,
+          fallbackStrategy: strategy,
+          fallbackVersion: usedVersion !== snapshot.version ? usedVersion : null,
+          append: false,
         });
+
+        if (page.hits.length === 0) {
+          captureEvent({
+            type: 'zero_results',
+            ts: Date.now(),
+            query: executedQuery,
+            source: snapshot.source,
+            version: snapshot.version,
+            contentType: snapshot.contentType,
+            fallbacksTried: versionFallbackTried,
+          });
+        }
       }
       setHasError(false);
     } catch (e) {
       if (abortRef.current !== ctrl || requestIdRef.current !== requestId) return;
-      if ((e as Error).name !== 'AbortError') setHasError(true);
+      if ((e as Error).name !== 'AbortError') {
+        setHasError(true);
+        captureEvent({
+          type: 'search_error',
+          ts: Date.now(),
+          query,
+          source: snapshot.source,
+          version: snapshot.version,
+          contentType: snapshot.contentType,
+          message: (e as Error).message ?? 'unknown',
+        });
+      }
     } finally {
       if (abortRef.current === ctrl) {
         if (append) setIsLoadingMore(false);
-        else        setIsLoading(false);
+        else        setIsSearching(false);
       }
     }
   }, [fetchSearchPage, versions]);
-
-  const scheduleSearch = useCallback((
-    query: string,
-    snapshot: Filters,
-    startOffset: number,
-    append: boolean,
-    interactionId: number,
-  ) => {
-    const now = Date.now();
-    requestTimestampsRef.current = requestTimestampsRef.current
-      .filter(ts => now - ts < SEARCH_RATE_LIMIT.windowMs);
-
-    if (requestTimestampsRef.current.length < SEARCH_RATE_LIMIT.maxRequests) {
-      requestTimestampsRef.current.push(now);
-      setIsRateLimited(false);
-      void runSearch(query, snapshot, startOffset, append, interactionId);
-      return;
-    }
-
-    queuedSearchRef.current = { query, snapshot, startOffset, append, interactionId };
-    if (rateLimitTimeoutRef.current) return;
-
-    setIsRateLimited(true);
-    const oldest = requestTimestampsRef.current[0];
-    const waitMs = Math.max(SEARCH_RATE_LIMIT.windowMs - (now - oldest), 100);
-    rateLimitTimeoutRef.current = setTimeout(() => {
-      rateLimitTimeoutRef.current = null;
-      const queued = queuedSearchRef.current;
-      queuedSearchRef.current = null;
-      if (!queued) {
-        setIsRateLimited(false);
-        return;
-      }
-      scheduleSearch(queued.query, queued.snapshot, queued.startOffset, queued.append, queued.interactionId);
-    }, waitMs);
-  }, [runSearch]);
 
   // Re-fetch on filter change; clears query to show browse mode.
   useEffect(() => {
@@ -551,9 +630,9 @@ export default function Page() {
     setSearchQuery('');
     interactionIdRef.current += 1;
     fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
-    scheduleSearch('', filters, 0, false, interactionIdRef.current);
+    void runSearch('', filters, 0, false, interactionIdRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.source, filters.version, filters.contentType, filters.loader, filters.shaderLoader, filters.pluginLoader, scheduleSearch]);
+  }, [filters.source, filters.version, filters.contentType, filters.loader, filters.shaderLoader, filters.pluginLoader, runSearch]);
 
   // ── Search actions ────────────────────────────────────────────────────────
 
@@ -563,8 +642,8 @@ export default function Page() {
     if (trimmed && trimmed.length < MIN_QUERY_LENGTH) return;
     interactionIdRef.current += 1;
     fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
-    scheduleSearch(trimmed, filters, 0, false, interactionIdRef.current);
-  }, [scheduleSearch, searchQuery, filters]);
+    void runSearch(trimmed, filters, 0, false, interactionIdRef.current);
+  }, [runSearch, searchQuery, filters]);
 
   const handleQueryChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -576,7 +655,7 @@ export default function Page() {
       if (activeRef.current.query === '') return;
       interactionIdRef.current += 1;
       fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
-      scheduleSearch('', filters, 0, false, interactionIdRef.current);
+      void runSearch('', filters, 0, false, interactionIdRef.current);
     } else {
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
@@ -584,10 +663,10 @@ export default function Page() {
         if (!next || next.length < MIN_QUERY_LENGTH) return;
         interactionIdRef.current += 1;
         fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
-        scheduleSearch(next, filters, 0, false, interactionIdRef.current);
+        void runSearch(next, filters, 0, false, interactionIdRef.current);
       }, SEARCH_DEBOUNCE_MS);
     }
-  }, [scheduleSearch, filters]);
+  }, [runSearch, filters]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') triggerSearch(); },
@@ -600,19 +679,18 @@ export default function Page() {
     if (activeRef.current.query === '') return;
     interactionIdRef.current += 1;
     fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
-    scheduleSearch('', filters, 0, false, interactionIdRef.current);
-  }, [scheduleSearch, filters]);
+    void runSearch('', filters, 0, false, interactionIdRef.current);
+  }, [runSearch, filters]);
 
   const loadMore = useCallback(() => {
     const { query, filters: f } = activeRef.current;
     interactionIdRef.current += 1;
     fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
-    scheduleSearch(query, f, offset, true, interactionIdRef.current);
-  }, [scheduleSearch, offset]);
+    void runSearch(query, f, offset, true, interactionIdRef.current);
+  }, [runSearch, offset]);
 
   useEffect(() => () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (rateLimitTimeoutRef.current) clearTimeout(rateLimitTimeoutRef.current);
     abortRef.current?.abort();
   }, []);
 
@@ -623,10 +701,10 @@ export default function Page() {
       const toBedrockBoundary   = s === 'curseforge-bedrock' && !BEDROCK_CONTENT_TYPES.has(prev.contentType);
       const fromBedrockBoundary = s !== 'curseforge-bedrock' &&  BEDROCK_CONTENT_TYPES.has(prev.contentType);
       const contentType = toBedrockBoundary ? 'addon' : fromBedrockBoundary ? 'mod' : prev.contentType;
-      // Preserve the version when switching between non-Bedrock sources.
       if (s !== 'curseforge-bedrock' && prev.source !== 'curseforge-bedrock' && prev.version) {
         preservedVersionRef.current = prev.version;
       }
+      captureEvent({ type: 'filter_change', ts: Date.now(), field: 'source', from: prev.source, to: s });
       return { ...prev, source: s, contentType };
     });
   }, []);
@@ -643,28 +721,45 @@ export default function Page() {
   }, [setSource]);
 
   const setVersion = useCallback((v: string) => {
-    setFilters(prev => ({ ...prev, version: v }));
+    setFilters(prev => {
+      captureEvent({ type: 'filter_change', ts: Date.now(), field: 'version', from: prev.version, to: v });
+      return { ...prev, version: v };
+    });
   }, []);
 
   const setLoader = useCallback((l: Loader) => {
-    setFilters(prev => ({ ...prev, loader: l }));
+    setFilters(prev => {
+      captureEvent({ type: 'filter_change', ts: Date.now(), field: 'loader', from: prev.loader, to: l });
+      return { ...prev, loader: l };
+    });
   }, []);
 
   const toggleShaderLoader = useCallback((sl: ShaderLoader) => {
-    setFilters(prev => ({ ...prev, shaderLoader: prev.shaderLoader === sl ? null : sl }));
+    setFilters(prev => {
+      const next = prev.shaderLoader === sl ? null : sl;
+      captureEvent({ type: 'filter_change', ts: Date.now(), field: 'shaderLoader', from: prev.shaderLoader ?? 'none', to: next ?? 'none' });
+      return { ...prev, shaderLoader: next };
+    });
   }, []);
 
   const togglePluginLoader = useCallback((pl: PluginLoader) => {
-    setFilters(prev => ({ ...prev, pluginLoader: prev.pluginLoader === pl ? null : pl }));
+    setFilters(prev => {
+      const next = prev.pluginLoader === pl ? null : pl;
+      captureEvent({ type: 'filter_change', ts: Date.now(), field: 'pluginLoader', from: prev.pluginLoader ?? 'none', to: next ?? 'none' });
+      return { ...prev, pluginLoader: next };
+    });
   }, []);
 
   const setContentType = useCallback((ct: ContentType) => {
-    setFilters(prev => ({
-      ...prev,
-      contentType:  ct,
-      shaderLoader: ct === 'shader' ? prev.shaderLoader : null,
-      pluginLoader: ct === 'plugin' ? prev.pluginLoader : null,
-    }));
+    setFilters(prev => {
+      captureEvent({ type: 'filter_change', ts: Date.now(), field: 'contentType', from: prev.contentType, to: ct });
+      return {
+        ...prev,
+        contentType:  ct,
+        shaderLoader: ct === 'shader' ? prev.shaderLoader : null,
+        pluginLoader: ct === 'plugin' ? prev.pluginLoader : null,
+      };
+    });
   }, []);
 
   // ── Snackbar: warn when Modrinth + datapack is selected ──────────────────
@@ -885,10 +980,10 @@ export default function Page() {
               </div>
               <button
                 onClick={triggerSearch}
-                disabled={isLoading || (!!searchQuery.trim() && searchQuery.trim().length < MIN_QUERY_LENGTH)}
+                disabled={isSearching || (!!searchQuery.trim() && searchQuery.trim().length < MIN_QUERY_LENGTH)}
                 className="h-7 w-7 rounded-md bg-brand border border-brand text-brand-dark flex items-center justify-center shrink-0 transition-all hover:bg-brand-hover active:scale-95 disabled:opacity-50"
               >
-                {isLoading
+                {isSearching
                   ? <Spinner size={11} />
                   : <MagnifyingGlassIcon className="w-[11px] h-[11px]" />
                 }
@@ -921,45 +1016,28 @@ export default function Page() {
               </div>
             )}
 
-            {isRateLimited && (
-              <div className="w-full text-[10px] text-amber-300">
-                Aguardando nova busca…
-              </div>
-            )}
           </div>
 
           {/* Results list */}
-          <div className="flex-1 overflow-y-auto relative">
+          <div className="flex-1 overflow-y-auto relative" style={{ viewTransitionName: 'results-list' }}>
 
-            {fallbackVersion && !isLoading && (
+            {fallbackVersion && !isSearching && (
               <div className="px-4 py-2 bg-brand-glow border-b border-brand/30 text-brand text-xs flex items-center gap-2">
                 <InformationCircleIcon className="w-4 h-4 shrink-0" />
                 <span>No {currentTypeInfo.label.toLowerCase()} for {filters.version}. Showing results from {fallbackVersion} instead.</span>
               </div>
             )}
 
-            {isLoading && results.length > 0 && (
-              <div className="absolute inset-0 bg-bg-base/60 flex items-start justify-center pt-10 z-10 pointer-events-none">
-                <div className="flex items-center gap-2 text-ink-secondary text-xs bg-bg-surface border border-line-subtle rounded-lg px-3 py-2 shadow-lg">
-                  <Spinner size={12} /> Updating...
-                </div>
-              </div>
-            )}
+            {isSearching && results.length === 0 && <SearchResultSkeletons />}
 
-            {isLoading && results.length === 0 && (
-              <div className="flex items-center justify-center gap-2 py-16 text-ink-secondary text-xs">
-                <Spinner /> Loading {currentTypeInfo.label.toLowerCase()}...
-              </div>
-            )}
-
-            {!isLoading && hasError && (
+            {!isSearching && hasError && (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-secondary text-xs">
                 <ExclamationTriangleIcon className="w-8 h-8 text-ink-primary" />
                 Error searching. Check your connection.
               </div>
             )}
 
-            {!isLoading && !hasError && results.length === 0 && filters.version && (
+            {!isSearching && !hasError && results.length === 0 && filters.version && (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-secondary text-xs text-center">
                 <MagnifyingGlassIcon className="w-8 h-8 text-ink-secondary opacity-50" />
                 <span>
@@ -1045,6 +1123,7 @@ export default function Page() {
                         disabled={queued}
                         onClick={() => {
                           queue.add(item.project_id, item.title, item.icon_url, filters);
+                          captureEvent({ type: 'queue_add', ts: Date.now(), id: item.project_id, title: item.title, source: filters.source, contentType: filters.contentType });
                           if (addedSnackbarTimerRef.current) clearTimeout(addedSnackbarTimerRef.current);
                           setAddedSnackbar(true);
                           addedSnackbarTimerRef.current = setTimeout(() => setAddedSnackbar(false), 2000);
@@ -1283,7 +1362,7 @@ export default function Page() {
             ) : queue.readyCount > 1 ? (
               <div className="flex w-full h-10 rounded-lg overflow-hidden border border-brand">
                 <button
-                  onClick={() => queue.downloadZip(archiveFormat)}
+                  onClick={() => { captureEvent({ type: 'queue_download', ts: Date.now(), itemCount: queue.readyCount, format: archiveFormat }); queue.downloadZip(archiveFormat); }}
                   className="flex-1 bg-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover active:scale-[0.98]"
                 >
                   <ArrowDownTrayIcon className="w-[13px] h-[13px]" />
@@ -1299,7 +1378,7 @@ export default function Page() {
               </div>
             ) : (
               <button
-                onClick={() => queue.downloadZip(archiveFormat)}
+                onClick={() => { captureEvent({ type: 'queue_download', ts: Date.now(), itemCount: queue.readyCount, format: archiveFormat }); queue.downloadZip(archiveFormat); }}
                 disabled={queue.readyCount === 0}
                 className="w-full h-10 rounded-lg bg-brand border border-brand text-brand-dark text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:bg-brand-hover hover:border-brand-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -1342,6 +1421,8 @@ export default function Page() {
           </div>
         </div>
       </div>
+
+      <DebugPanel />
 
       {/* ── Added-to-queue snackbar ──────────────────────────────────────── */}
       {addedSnackbar && (
