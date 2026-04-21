@@ -900,6 +900,12 @@ export default function Page() {
               </button>
             ))}
           </div>
+          <a
+            href="/rankings"
+            className="ml-auto text-[11px] text-ink-secondary hover:text-ink-primary transition-colors whitespace-nowrap shrink-0"
+          >
+            Rankings
+          </a>
         </div>
       </header>
 

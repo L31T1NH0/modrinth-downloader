@@ -440,6 +440,22 @@ export function useQueue(): UseQueueReturn {
       }
     });
 
+    const succeeded = ready.filter(e => !failedReasons.has(e.queueKey));
+    if (succeeded.length > 0) {
+      fetch('/api/track-download', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mods: succeeded.map(e => ({
+            id:      e.id,
+            name:    e.title,
+            source:  e.filters.source,
+            iconUrl: e.iconUrl ?? undefined,
+          })),
+        }),
+      }).catch(() => { /* tracking failure never affects downloads */ });
+    }
+
     dispatch({ type: 'SET_DOWNLOADING', value: false });
   // entries + isDownloading are the only runtime deps needed here.
   // eslint-disable-next-line react-hooks/exhaustive-deps
