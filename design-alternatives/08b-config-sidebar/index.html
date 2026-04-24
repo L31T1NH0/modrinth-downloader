@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dynrinth — 08b Config Sidebar</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar: logo + nav + filtros integrados -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="#">
+      <div class="logo-mark"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 3v11M5 9l5 5 5-5"/></svg></div>
+      <span class="logo-name">dynrinth</span>
+    </a>
+
+    <!-- Filtros primeiro -->
+    <div class="filter-section">
+      <div class="nav-label">Source</div>
+      <div class="filter-row">
+        <select><option>Modrinth</option><option>CurseForge</option><option>Bedrock</option></select>
+      </div>
+      <div class="nav-label" style="margin-top:6px;">Version</div>
+      <div class="filter-row">
+        <select><option>1.21.4</option><option>1.21.3</option><option>1.20.1</option></select>
+      </div>
+      <div class="nav-label" style="margin-top:6px;">Loader</div>
+      <div class="filter-row">
+        <div class="pills">
+          <button class="pill on">Fabric</button>
+          <button class="pill">Forge</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-divider"></div>
+
+    <!-- Content type abaixo -->
+    <div class="nav-section">
+      <div class="nav-label">Content type</div>
+      <div class="nav-item on">Mods</div>
+      <div class="nav-item">Plugins</div>
+      <div class="nav-item">Datapacks</div>
+      <div class="nav-item">Resourcepacks</div>
+      <div class="nav-item">Shaders</div>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+  </aside>
+
+  <!-- Centro: só search + results, sem distrações -->
+  <div class="center">
+    <div class="search-bar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13.5 13.5 3 3"/></svg>
+        <input type="text" placeholder="Search mods…" />
+      </div>
+      <button class="search-btn">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13.5 13.5 3 3"/></svg>
+        Search
+      </button>
+    </div>
+
+    <div class="results">
+      <div class="row queued">
+        <div class="row-icon">🧱</div>
+        <div class="row-body">
+          <div class="row-title">Fabric API</div>
+          <div class="row-desc">Core API library for the Fabric toolchain, providing common hooks and interoperability utilities.</div>
+          <div class="row-tags"><span class="rtag g">⬇ 123M</span><span class="rtag">library</span><span class="rtag">utility</span></div>
+        </div>
+        <button class="row-add on"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 10l4 4 8-8"/></svg></button>
+      </div>
+      <div class="row">
+        <div class="row-icon">⚡</div>
+        <div class="row-body">
+          <div class="row-title">Sodium</div>
+          <div class="row-desc">Modern rendering engine and client-side optimization mod, dramatically improving frame rates.</div>
+          <div class="row-tags"><span class="rtag g">⬇ 45M</span><span class="rtag">optimization</span><span class="rtag">render</span></div>
+        </div>
+        <button class="row-add"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 4v12M4 10h12"/></svg></button>
+      </div>
+      <div class="row">
+        <div class="row-icon">🎨</div>
+        <div class="row-body">
+          <div class="row-title">Iris Shaders</div>
+          <div class="row-desc">A modern shader pack loader for Minecraft intended to be compatible with existing OptiFine shader packs.</div>
+          <div class="row-tags"><span class="rtag g">⬇ 28M</span><span class="rtag">shaders</span><span class="rtag">graphics</span></div>
+        </div>
+        <button class="row-add"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 4v12M4 10h12"/></svg></button>
+      </div>
+      <div class="row">
+        <div class="row-icon">🗺️</div>
+        <div class="row-body">
+          <div class="row-title">Journeymap</div>
+          <div class="row-desc">Real-time mapping in-game or your browser as you explore. Never get lost again.</div>
+          <div class="row-tags"><span class="rtag g">⬇ 22M</span><span class="rtag">map</span><span class="rtag">utility</span></div>
+        </div>
+        <button class="row-add"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 4v12M4 10h12"/></svg></button>
+      </div>
+      <div class="row">
+        <div class="row-icon">🔧</div>
+        <div class="row-body">
+          <div class="row-title">Cloth Config API</div>
+          <div class="row-desc">Configuration library for mods with a built-in GUI for user-friendly settings editing.</div>
+          <div class="row-tags"><span class="rtag g">⬇ 19M</span><span class="rtag">library</span><span class="rtag">config</span></div>
+        </div>
+        <button class="row-add"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 4v12M4 10h12"/></svg></button>
+      </div>
+      <div class="row">
+        <div class="row-icon">📦</div>
+        <div class="row-body">
+          <div class="row-title">Mod Menu</div>
+          <div class="row-desc">Adds a screen for viewing a list of installed mods, with search, sorting, and categories.</div>
+          <div class="row-tags"><span class="rtag g">⬇ 16M</span><span class="rtag">ui</span><span class="rtag">utility</span></div>
+        </div>
+        <button class="row-add"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 4v12M4 10h12"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Queue panel -->
+  <div class="q-panel">
+    <div class="q-head"><span class="q-title">Queue</span><span class="q-count">3</span><span class="q-clear">clear</span></div>
+    <div class="q-list">
+      <div class="q-item"><div class="dot ok"></div><div class="q-body"><div class="q-name">Fabric API</div><div class="q-meta">0.107.0+1.21.4 · 1.4 MB</div></div><button class="q-rm"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16"/></svg></button></div>
+      <div class="q-item"><div class="dot run"></div><div class="q-body"><div class="q-name">Sodium</div><div class="q-meta">Downloading… 67%</div></div><button class="q-rm"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16"/></svg></button></div>
+      <div class="q-item"><div class="dot"></div><div class="q-body"><div class="q-name">Iris Shaders</div><div class="q-meta">Resolving…</div></div><button class="q-rm"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l12 12M16 4L4 16"/></svg></button></div>
+    </div>
+    <div class="q-foot">
+      <div class="q-actions">
+        <button class="q-action"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3v11M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Export</button>
+        <button class="q-action"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17V6M5 11l5-5 5 5"/><path d="M3 3h14"/></svg>Import</button>
+        <button class="q-action"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13.5 6.5a3 3 0 1 1 0 .01M6.5 10a3 3 0 1 1 0 .01M13.5 13.5a3 3 0 1 1 0 .01M6.5 9.5l7-3.5M6.5 10l7 3"/></svg>Share</button>
+      </div>
+      <button class="dl-btn"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3v11M5 9l5 5 5-5"/><path d="M3 17h14"/></svg>Download 3 files</button>
+      <div class="q-status"><span class="s-ok">1 ready</span><span class="s-run">1 downloading</span><span>1 pending</span></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
