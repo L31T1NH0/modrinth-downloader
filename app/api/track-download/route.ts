@@ -4,10 +4,12 @@ import { checkRateLimit } from '@/lib/rateLimit';
 import { getRequestIp } from '@/lib/requestIp';
 
 interface TrackedMod {
-  id:      string;
-  name:    string;
-  source:  string;
-  iconUrl?: string;
+  id:           string;
+  name:         string;
+  source:       string;
+  iconUrl?:     string;
+  contentType?: string;
+  version?:     string;
 }
 
 interface TrackDownloadBody {
@@ -52,6 +54,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     for (const mod of mods) {
       if (!mod.id || !mod.source) continue;
       commands.push(['ZINCRBY', LEADERBOARD_KEY, '1', member(mod.source, mod.id)]);
+      if (mod.contentType) {
+        commands.push(['ZINCRBY', `downloads:leaderboard:${mod.contentType}`, '1', member(mod.source, mod.id)]);
+        if (mod.version) {
+          commands.push(['ZINCRBY', `downloads:leaderboard:${mod.contentType}:${mod.version}`, '1', member(mod.source, mod.id)]);
+        }
+      }
       commands.push(['HSET', metaKey(mod.source, mod.id),
         'name',    mod.name    ?? '',
         'iconUrl', mod.iconUrl ?? '',

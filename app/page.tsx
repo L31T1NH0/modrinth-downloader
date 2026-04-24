@@ -17,6 +17,11 @@ import {
   InformationCircleIcon,
   ArchiveBoxIcon,
   CubeIcon,
+  ServerStackIcon,
+  CircleStackIcon,
+  PhotoIcon,
+  SparklesIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 import { CloudArrowDownIcon } from '@heroicons/react/24/solid';
 import * as modrinthService from '@/lib/modrinth/service';
@@ -105,6 +110,14 @@ const CONTENT_TYPES: { id: ContentType; label: string; usesLoader: boolean; sour
 
 /** Content types that belong exclusively to Bedrock. */
 const BEDROCK_CONTENT_TYPES = new Set<ContentType>(['addon', 'map', 'texture-pack', 'script', 'skin']);
+
+const CONTENT_TYPE_ICONS: Partial<Record<ContentType, React.ComponentType<React.SVGProps<SVGSVGElement>>>> = {
+  mod:          ArchiveBoxIcon,
+  plugin:       ServerStackIcon,
+  datapack:     CircleStackIcon,
+  resourcepack: PhotoIcon,
+  shader:       SparklesIcon,
+};
 
 const DEFAULT_FILTERS: Filters = {
   source:       'modrinth',
@@ -890,98 +903,178 @@ export default function Page() {
   return (
     <div className="flex flex-col bg-bg-base text-ink-primary overflow-hidden select-none" style={{ height: '100dvh' }}>
 
-      {/* ── Header ───────────────────────────────────────────────────────── */}
-      <header className="border-b border-line-subtle shrink-0">
-        <div className="flex items-center gap-6 px-5 py-2.5">
-          <div className="flex items-center gap-3">
+      {/* ── Main area ────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── Sidebar (desktop only) ──────────────────────────────────────── */}
+        <aside className="hidden md:flex w-[196px] flex-shrink-0 flex-col bg-bg-base border-r border-line-subtle overflow-hidden">
+
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 px-3.5 border-b border-line-subtle shrink-0 h-12">
             <div className="w-6 h-6 rounded-md bg-brand flex items-center justify-center shrink-0">
               <CloudArrowDownIcon className="w-3.5 h-3.5 text-brand-dark" />
             </div>
             <span className="text-[14px] font-semibold tracking-tight">dynrinth</span>
           </div>
-          <div className="flex overflow-x-auto scrollbar-none gap-6">
-            {CONTENT_TYPES.filter(ct => ct.sources.includes(filters.source)).map(ct => (
-              <button
-                key={ct.id}
-                onClick={() => setContentType(ct.id)}
-                className={[
-                  'px-0 py-2 text-xs font-medium border-b-2 transition-all duration-150 -mb-px whitespace-nowrap',
-                  filters.contentType === ct.id
-                    ? 'border-brand text-ink-primary'
-                    : 'border-transparent text-ink-secondary hover:text-ink-primary',
-                ].join(' ')}
-              >
-                {ct.label}
-              </button>
-            ))}
+
+          {/* Filters */}
+          <div className="py-2 shrink-0">
+            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-1 pb-1.5">Source</p>
+            <div className="px-3.5">
+              <CustomSelect
+                value={filters.source}
+                onChange={v => setSource(v as Source)}
+                options={[
+                  { value: 'modrinth',          label: 'Modrinth'   },
+                  { value: 'curseforge',         label: 'CurseForge' },
+                  { value: 'curseforge-bedrock', label: 'Bedrock'    },
+                ]}
+                width="w-full"
+              />
+            </div>
+
+            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Version</p>
+            <div className="px-3.5">
+              <CustomSelect
+                value={filters.version}
+                onChange={setVersion}
+                options={versions.length ? versions.map(v => ({ value: v, label: v })) : [{ value: '', label: '...' }]}
+                width="w-full"
+              />
+            </div>
+
+            {currentTypeInfo.usesLoader && (
+              <>
+                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Loader</p>
+                <div className="px-3.5">
+                  <PillToggle<Loader> options={LOADERS} active={filters.loader} onToggle={setLoader} />
+                </div>
+              </>
+            )}
+            {filters.contentType === 'shader' && (
+              <>
+                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Renderer</p>
+                <div className="px-3.5">
+                  <PillToggle<ShaderLoader> options={SHADER_LOADERS} active={filters.shaderLoader} onToggle={toggleShaderLoader} />
+                </div>
+              </>
+            )}
+            {filters.contentType === 'plugin' && (
+              <>
+                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Platform</p>
+                <div className="px-3.5">
+                  <PillToggle<PluginLoader> options={PLUGIN_LOADERS} active={filters.pluginLoader} onToggle={togglePluginLoader} />
+                </div>
+              </>
+            )}
           </div>
-          <a
-            href="/rankings"
-            className="ml-auto text-[11px] text-ink-secondary hover:text-ink-primary transition-colors whitespace-nowrap shrink-0"
-          >
-            Rankings
-          </a>
-        </div>
-      </header>
 
-      {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+          {/* Divider */}
+          <div className="h-px bg-line-subtle mx-3.5 my-1 shrink-0" />
 
-        {/* ── Left panel ─────────────────────────────────────────────────── */}
+          {/* Content type nav */}
+          <div className="py-1 overflow-y-auto">
+            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-1 pb-1.5">Content type</p>
+            {CONTENT_TYPES.filter(ct => ct.sources.includes(filters.source)).map(ct => {
+              const Icon = CONTENT_TYPE_ICONS[ct.id];
+              return (
+                <button
+                  key={ct.id}
+                  onClick={() => setContentType(ct.id)}
+                  className={[
+                    'flex items-center gap-2 w-[calc(100%-12px)] mx-1.5 px-3 py-1.5 mb-px rounded text-[12.5px] font-medium transition-all duration-100 border',
+                    filters.contentType === ct.id
+                      ? 'bg-brand-glow text-ink-primary border-brand/30'
+                      : 'text-ink-secondary hover:text-ink-primary hover:bg-bg-hover border-transparent',
+                  ].join(' ')}
+                >
+                  {Icon && <Icon className="w-3 h-3 shrink-0" />}
+                  {ct.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Rankings link */}
+          <div className="px-1.5 py-2 border-t border-line-subtle shrink-0">
+            <a
+              href="/rankings"
+              className="flex items-center gap-2 px-3 py-1.5 rounded text-[12.5px] font-medium transition-all duration-100 border text-ink-secondary hover:text-ink-primary hover:bg-bg-hover border-transparent"
+            >
+              <TrophyIcon className="w-3 h-3 shrink-0" />
+              Rankings
+            </a>
+          </div>
+        </aside>
+
+        {/* ── Center panel (search + results) ─────────────────────────────── */}
         <div className={`${mobilePanel === 'queue' ? 'hidden' : 'flex'} md:flex flex-1 flex-col overflow-hidden min-w-0`}>
 
-          {/* Version + loader row */}
-          <div className="flex items-center gap-3 px-5 py-2 border-b border-line-subtle shrink-0 flex-wrap">
-
-            {/* API source */}
-            <CustomSelect
-              value={filters.source}
-              onChange={v => setSource(v as Source)}
-              options={[
-                { value: 'modrinth',           label: 'Modrinth'    },
-                { value: 'curseforge',          label: 'CurseForge'  },
-                { value: 'curseforge-bedrock',  label: 'Bedrock'     },
-              ]}
-              width="w-32"
-            />
-
-            {/* MC version */}
-            <CustomSelect
-              value={filters.version}
-              onChange={setVersion}
-              options={versions.length ? versions.map(v => ({ value: v, label: v })) : [{ value: '', label: '...' }]}
-              width="w-28"
-            />
-
-            {/* Mod loader */}
-            {currentTypeInfo.usesLoader && (
-              <PillToggle<Loader>
-                options={LOADERS}
-                active={filters.loader}
-                onToggle={setLoader}
+          {/* Mobile header: logo + content tabs + filters */}
+          <div className="md:hidden border-b border-line-subtle shrink-0">
+            <div className="flex items-center gap-5 px-5 py-2 overflow-x-auto scrollbar-none">
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="w-5 h-5 rounded bg-brand flex items-center justify-center">
+                  <CloudArrowDownIcon className="w-3 h-3 text-brand-dark" />
+                </div>
+                <span className="text-[13px] font-semibold tracking-tight">dynrinth</span>
+              </div>
+              {CONTENT_TYPES.filter(ct => ct.sources.includes(filters.source)).map(ct => (
+                <button
+                  key={ct.id}
+                  onClick={() => setContentType(ct.id)}
+                  className={[
+                    'py-2 text-xs font-medium border-b-2 transition-all duration-150 -mb-px whitespace-nowrap',
+                    filters.contentType === ct.id
+                      ? 'border-brand text-ink-primary'
+                      : 'border-transparent text-ink-secondary hover:text-ink-primary',
+                  ].join(' ')}
+                >
+                  {ct.label}
+                </button>
+              ))}
+              <a
+                href="/rankings"
+                className="ml-auto text-[11px] text-ink-secondary hover:text-ink-primary transition-colors whitespace-nowrap shrink-0"
+              >
+                Rankings
+              </a>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-2 flex-wrap">
+              <CustomSelect
+                value={filters.source}
+                onChange={v => setSource(v as Source)}
+                options={[
+                  { value: 'modrinth',          label: 'Modrinth'   },
+                  { value: 'curseforge',         label: 'CurseForge' },
+                  { value: 'curseforge-bedrock', label: 'Bedrock'    },
+                ]}
+                width="w-32"
               />
-            )}
-
-            {/* Shader renderer */}
-            {filters.contentType === 'shader' && (
-              <PillToggle<ShaderLoader>
-                options={SHADER_LOADERS}
-                active={filters.shaderLoader}
-                onToggle={toggleShaderLoader}
+              <CustomSelect
+                value={filters.version}
+                onChange={setVersion}
+                options={versions.length ? versions.map(v => ({ value: v, label: v })) : [{ value: '', label: '...' }]}
+                width="w-28"
               />
-            )}
+              {currentTypeInfo.usesLoader && (
+                <PillToggle<Loader> options={LOADERS} active={filters.loader} onToggle={setLoader} />
+              )}
+              {filters.contentType === 'shader' && (
+                <PillToggle<ShaderLoader> options={SHADER_LOADERS} active={filters.shaderLoader} onToggle={toggleShaderLoader} />
+              )}
+              {filters.contentType === 'plugin' && (
+                <PillToggle<PluginLoader> options={PLUGIN_LOADERS} active={filters.pluginLoader} onToggle={togglePluginLoader} />
+              )}
+            </div>
+          </div>
 
-            {/* Plugin platform */}
-            {filters.contentType === 'plugin' && (
-              <PillToggle<PluginLoader>
-                options={PLUGIN_LOADERS}
-                active={filters.pluginLoader}
-                onToggle={togglePluginLoader}
-              />
-            )}
-
-            {/* Search input */}
-            <div className="flex gap-1 w-full md:ml-auto md:flex-1 md:max-w-sm">
+          {/* Search bar */}
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-line-subtle shrink-0 bg-bg-base flex-wrap">
+            <div className="flex gap-1 flex-1 min-w-0 max-w-sm">
               <div className="relative flex-1">
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-secondary" />
                 <input
@@ -1039,7 +1132,6 @@ export default function Page() {
                 {t.search.minLength.replace('{n}', String(MIN_QUERY_LENGTH))}
               </div>
             )}
-
           </div>
 
           {/* Results list */}
@@ -1196,7 +1288,7 @@ export default function Page() {
         {/* ── Divider ────────────────────────────────────────────────────── */}
         <div className="hidden md:block w-px bg-line-subtle self-stretch shrink-0" />
 
-        {/* ── Right panel (queue) ─────────────────────────────────────────── */}
+        {/* ── Queue panel ─────────────────────────────────────────────────── */}
         <div className={`${mobilePanel === 'search' ? 'hidden' : 'flex'} md:flex w-full md:w-[290px] flex-col shrink-0`}>
 
           {/* Queue header */}

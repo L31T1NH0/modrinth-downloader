@@ -447,10 +447,12 @@ export function useQueue(): UseQueueReturn {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mods: succeeded.map(e => ({
-            id:      e.id,
-            name:    e.title,
-            source:  e.filters.source,
-            iconUrl: e.iconUrl ?? undefined,
+            id:          e.id,
+            name:        e.title,
+            source:      e.filters.source,
+            iconUrl:     e.iconUrl ?? undefined,
+            contentType: e.filters.contentType,
+            version:     e.filters.version || undefined,
           })),
         }),
       }).catch(() => { /* tracking failure never affects downloads */ });
