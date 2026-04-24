@@ -325,6 +325,8 @@ export default function Page() {
   const restoredVersionRef = useRef<string | null>(null);
   // Holds the version to preserve when switching between non-Bedrock sources.
   const preservedVersionRef = useRef<string | null>(null);
+  // Holds a query coming from ?q= URL param (e.g. from Rankings page).
+  const initialQRef = useRef<string | null>(null);
 
   // ── Mobile panel ─────────────────────────────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
@@ -638,12 +640,15 @@ export default function Page() {
   }, [fetchSearchPage, versions]);
 
   // Re-fetch on filter change; clears query to show browse mode.
+  // On first version load, checks for a ?q= param passed from external pages.
   useEffect(() => {
     if (!filters.version) return;
-    setSearchQuery('');
+    const q = initialQRef.current ?? '';
+    initialQRef.current = null;
+    setSearchQuery(q);
     interactionIdRef.current += 1;
     fallbackUsageByInteractionRef.current.delete(interactionIdRef.current);
-    void runSearch('', filters, 0, false, interactionIdRef.current);
+    void runSearch(q, filters, 0, false, interactionIdRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.source, filters.version, filters.contentType, filters.loader, filters.shaderLoader, filters.pluginLoader, runSearch]);
 
@@ -791,6 +796,16 @@ export default function Page() {
     }
     if (decision === 'dismissed') return;
     setShowMobileSourceSuggestion(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── ?q= pre-fill from external pages (e.g. Rankings) ────────────────────
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (!q) return;
+    initialQRef.current = decodeURIComponent(q);
+    window.history.replaceState({}, '', window.location.pathname);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
