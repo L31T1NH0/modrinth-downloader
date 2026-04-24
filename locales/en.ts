@@ -47,6 +47,7 @@ export const en = {
     restoring:          'Restoring...',
     share:              'Share',
     shareTitle:         'Copy shareable URL',
+    copySharePrompt:    'Copy this share URL:',
     copied:             'Copied!',
     downloadFile:       'Download file',
     downloadFiles:      'Download {n} files',
@@ -74,6 +75,78 @@ export const en = {
   nav: {
     search: 'Search',
     queue:  'Queue',
+  },
+
+  filters: {
+    source:      'Source',
+    version:     'Version',
+    loader:      'Loader',
+    renderer:    'Renderer',
+    platform:    'Platform',
+    contentType: 'Content type',
+    sources: {
+      modrinth:   'Modrinth',
+      curseforge: 'CurseForge',
+      bedrock:    'Bedrock',
+    },
+    contentTypes: {
+      mod:            'Mods',
+      plugin:         'Plugins',
+      datapack:       'Datapacks',
+      resourcepack:   'Resourcepacks',
+      shader:         'Shaders',
+      addon:          'Addons',
+      map:            'Maps',
+      'texture-pack': 'Texture Packs',
+      script:         'Scripts',
+      skin:           'Skins',
+    },
+  },
+
+  rankings: {
+    title:            'Rankings',
+    mostDownloaded:   'Most Downloaded',
+    tracked:          'Tracked',
+    downloads:        'Downloads',
+    loading:          'Loading rankings...',
+    empty:            'No {type} rankings yet',
+    emptyHint:        'Download some through Dynrinth to get started!',
+    alreadyInQueue:   'Already in queue',
+    addToQueueTitle:  'Add to queue - {version} - {loader}',
+    openToSetVersion: 'Open Dynrinth to set a Minecraft version first',
+    searchOnDynrinth: 'Search "{name}" on Dynrinth',
+    viewOnPlatform:   'View on platform',
+    tracking:         'Tracking downloads through Dynrinth',
+  },
+
+  importErrors: {
+    noModrinthCdnFiles: 'No Modrinth CDN files found in the index.',
+    unsupportedFormat:  'Unsupported format. Expected ModListState v1/v2 or compatible aliases.',
+    invalidJson:        'Invalid JSON.',
+    fileReadFailed:     'File read failed.',
+    invalidStructure:   'invalid structure',
+    detail:             'Detail: {detail}',
+  },
+
+  debug: {
+    browse:    'browse',
+    hits:      'hits',
+    download:  'download',
+    files:     'files',
+    loadMore:  'load more',
+    open:      'Open debug panel (Ctrl+Shift+D)',
+    hint:      'Ctrl+Shift+D - click row to expand - copy JSON to share',
+    events:    'events',
+    copied:    'copied!',
+    copyJson:  'copy JSON',
+    clear:     'clear',
+    noEvents:  'no events yet',
+  },
+
+  meta: {
+    homeDescription:     'Easy search and download Minecraft mods from Modrinth & CurseForge',
+    rankingsTitle:       'Rankings - Dynrinth',
+    rankingsDescription: 'Most downloaded Minecraft content through Dynrinth',
   },
 
   mobileSuggestion: {

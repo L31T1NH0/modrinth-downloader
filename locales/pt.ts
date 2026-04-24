@@ -49,6 +49,7 @@ export const pt: typeof en = {
     restoring:        'Restaurando...',
     share:            'Compartilhar',
     shareTitle:       'Copiar URL compartilhável',
+    copySharePrompt:  'Copie esta URL de compartilhamento:',
     copied:           'Copiado!',
     downloadFile:     'Baixar arquivo',
     downloadFiles:    'Baixar {n} arquivos',
@@ -76,6 +77,78 @@ export const pt: typeof en = {
   nav: {
     search: 'Pesquisar',
     queue:  'Fila',
+  },
+
+  filters: {
+    source:      'Fonte',
+    version:     'Versão',
+    loader:      'Loader',
+    renderer:    'Renderizador',
+    platform:    'Plataforma',
+    contentType: 'Tipo de conteúdo',
+    sources: {
+      modrinth:   'Modrinth',
+      curseforge: 'CurseForge',
+      bedrock:    'Bedrock',
+    },
+    contentTypes: {
+      mod:            'Mods',
+      plugin:         'Plugins',
+      datapack:       'Datapacks',
+      resourcepack:   'Pacotes de recursos',
+      shader:         'Shaders',
+      addon:          'Addons',
+      map:            'Mapas',
+      'texture-pack': 'Pacotes de textura',
+      script:         'Scripts',
+      skin:           'Skins',
+    },
+  },
+
+  rankings: {
+    title:            'Rankings',
+    mostDownloaded:   'Mais baixados',
+    tracked:          'Rastreados',
+    downloads:        'Downloads',
+    loading:          'Carregando rankings...',
+    empty:            'Ainda não há rankings para {type}',
+    emptyHint:        'Baixe algo pelo Dynrinth para começar!',
+    alreadyInQueue:   'Já está na fila',
+    addToQueueTitle:  'Adicionar à fila - {version} - {loader}',
+    openToSetVersion: 'Abra o Dynrinth para definir primeiro uma versão do Minecraft',
+    searchOnDynrinth: 'Pesquisar "{name}" no Dynrinth',
+    viewOnPlatform:   'Ver na plataforma',
+    tracking:         'Downloads rastreados pelo Dynrinth',
+  },
+
+  importErrors: {
+    noModrinthCdnFiles: 'Nenhum arquivo CDN do Modrinth encontrado no índice.',
+    unsupportedFormat:  'Formato não suportado. Esperado: ModListState v1/v2 ou aliases compatíveis.',
+    invalidJson:        'JSON inválido.',
+    fileReadFailed:     'Falha ao ler o arquivo.',
+    invalidStructure:   'estrutura inválida',
+    detail:             'Detalhe: {detail}',
+  },
+
+  debug: {
+    browse:    'navegação',
+    hits:      'resultados',
+    download:  'download',
+    files:     'arquivos',
+    loadMore:  'carregar mais',
+    open:      'Abrir painel de debug (Ctrl+Shift+D)',
+    hint:      'Ctrl+Shift+D - clique na linha para expandir - copie o JSON para compartilhar',
+    events:    'eventos',
+    copied:    'copiado!',
+    copyJson:  'copiar JSON',
+    clear:     'limpar',
+    noEvents:  'ainda não há eventos',
+  },
+
+  meta: {
+    homeDescription:     'Pesquise e baixe mods de Minecraft do Modrinth e CurseForge com facilidade',
+    rankingsTitle:       'Rankings - Dynrinth',
+    rankingsDescription: 'Conteúdos de Minecraft mais baixados pelo Dynrinth',
   },
 
   mobileSuggestion: {

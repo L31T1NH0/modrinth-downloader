@@ -313,7 +313,7 @@ export function readJSONFile(file: File): Promise<ModListState> {
         const parsed = JSON.parse(e.target?.result as string);
         if (isModrinthIndex(parsed)) {
           const state = fromModrinthIndex(parsed);
-          if (!state) { reject(new Error('No Modrinth CDN files found in index')); return; }
+          if (!state) { reject(new Error('No Modrinth CDN files found in the index.')); return; }
           resolve(state);
           return;
         }
@@ -321,7 +321,7 @@ export function readJSONFile(file: File): Promise<ModListState> {
         if (!migrated.state) {
           reject(
             new Error(
-              `Formato não suportado. Esperado: ModListState v1/v2 (ou aliases compatíveis: projects/mods, mcVersion/version). Detalhe: ${migrated.error ?? 'estrutura inválida'}`,
+              `Unsupported format. Expected ModListState v1/v2 or compatible aliases. Detail: ${migrated.error ?? 'invalid structure'}`,
             ),
           );
           return;
@@ -331,10 +331,10 @@ export function readJSONFile(file: File): Promise<ModListState> {
         }
         resolve(migrated.state);
       } catch {
-        reject(new Error('Invalid JSON'));
+        reject(new Error('Invalid JSON.'));
       }
     };
-    reader.onerror = () => reject(new Error('File read failed'));
+    reader.onerror = () => reject(new Error('File read failed.'));
     reader.readAsText(file);
   });
 }

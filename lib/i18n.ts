@@ -1,20 +1,18 @@
+'use client';
+
 import { useSyncExternalStore } from 'react';
-import { en } from '@/locales/en';
-import { de } from '@/locales/de';
-import { tr } from '@/locales/tr';
-import { pt } from '@/locales/pt';
+import {
+  detectLocaleFromLanguage,
+  getTranslations,
+  defaultTranslations,
+  type Locale,
+  type Translations,
+} from '@/lib/i18n-core';
 
-export type Locale = 'en' | 'de' | 'tr' | 'pt';
-export type Translations = typeof en;
-
-const locales: Record<Locale, Translations> = { en, de, tr, pt };
+export type { Translations } from '@/lib/i18n-core';
 
 function detectLocale(): Locale {
-  const lang = navigator.language.toLowerCase();
-  if (lang.startsWith('de')) return 'de';
-  if (lang.startsWith('tr')) return 'tr';
-  if (lang.startsWith('pt')) return 'pt';
-  return 'en';
+  return detectLocaleFromLanguage(navigator.language);
 }
 
 // Locale never changes at runtime, so no subscription is needed.
@@ -29,7 +27,7 @@ const emptySubscribe = () => () => {};
 export function useLocale(): Translations {
   return useSyncExternalStore(
     emptySubscribe,
-    () => locales[detectLocale()],
-    () => en,
+    () => getTranslations(detectLocale()),
+    () => defaultTranslations,
   );
 }

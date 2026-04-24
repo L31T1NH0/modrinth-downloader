@@ -17,6 +17,7 @@ import {
   InformationCircleIcon,
   ArchiveBoxIcon,
   CubeIcon,
+  CogIcon,
   ServerStackIcon,
   CircleStackIcon,
   PhotoIcon,
@@ -95,24 +96,24 @@ const PLUGIN_LOADERS: { id: PluginLoader; label: string }[] = [
   { id: 'bukkit', label: 'Bukkit' },
 ];
 
-const CONTENT_TYPES: { id: ContentType; label: string; usesLoader: boolean; sources: Source[] }[] = [
-  { id: 'mod',            label: 'Mods',          usesLoader: true,  sources: ['modrinth', 'curseforge']          },
-  { id: 'plugin',         label: 'Plugins',       usesLoader: false, sources: ['modrinth']                        },
-  { id: 'datapack',       label: 'Datapacks',     usesLoader: false, sources: ['modrinth', 'curseforge']          },
-  { id: 'resourcepack',   label: 'Resourcepacks', usesLoader: false, sources: ['modrinth', 'curseforge']          },
-  { id: 'shader',         label: 'Shaders',       usesLoader: false, sources: ['modrinth', 'curseforge']          },
-  { id: 'addon',          label: 'Addons',        usesLoader: false, sources: ['curseforge-bedrock']              },
-  { id: 'map',            label: 'Maps',          usesLoader: false, sources: ['curseforge-bedrock']              },
-  { id: 'texture-pack',   label: 'Texture Packs', usesLoader: false, sources: ['curseforge-bedrock']              },
-  { id: 'script',         label: 'Scripts',       usesLoader: false, sources: ['curseforge-bedrock']              },
-  { id: 'skin',           label: 'Skins',         usesLoader: false, sources: ['curseforge-bedrock']              },
+const CONTENT_TYPES: { id: ContentType; usesLoader: boolean; sources: Source[] }[] = [
+  { id: 'mod',            usesLoader: true,  sources: ['modrinth', 'curseforge']          },
+  { id: 'plugin',         usesLoader: false, sources: ['modrinth']                        },
+  { id: 'datapack',       usesLoader: false, sources: ['modrinth', 'curseforge']          },
+  { id: 'resourcepack',   usesLoader: false, sources: ['modrinth', 'curseforge']          },
+  { id: 'shader',         usesLoader: false, sources: ['modrinth', 'curseforge']          },
+  { id: 'addon',          usesLoader: false, sources: ['curseforge-bedrock']              },
+  { id: 'map',            usesLoader: false, sources: ['curseforge-bedrock']              },
+  { id: 'texture-pack',   usesLoader: false, sources: ['curseforge-bedrock']              },
+  { id: 'script',         usesLoader: false, sources: ['curseforge-bedrock']              },
+  { id: 'skin',           usesLoader: false, sources: ['curseforge-bedrock']              },
 ];
 
 /** Content types that belong exclusively to Bedrock. */
 const BEDROCK_CONTENT_TYPES = new Set<ContentType>(['addon', 'map', 'texture-pack', 'script', 'skin']);
 
 const CONTENT_TYPE_ICONS: Partial<Record<ContentType, React.ComponentType<React.SVGProps<SVGSVGElement>>>> = {
-  mod:          ArchiveBoxIcon,
+  mod:          CogIcon,
   plugin:       ServerStackIcon,
   datapack:     CircleStackIcon,
   resourcepack: PhotoIcon,
@@ -157,6 +158,28 @@ function statusLabel(s: QueueItemStatus, t: Translations): string {
   if (s === 'downloading') return t.status.downloading;
   if (s === 'done')        return t.status.done;
   return '';
+}
+
+function sourceLabel(source: Source, t: Translations): string {
+  if (source === 'modrinth') return t.filters.sources.modrinth;
+  if (source === 'curseforge') return t.filters.sources.curseforge;
+  return t.filters.sources.bedrock;
+}
+
+function contentTypeLabel(contentType: ContentType, t: Translations): string {
+  return t.filters.contentTypes[contentType];
+}
+
+function translateImportError(message: string, t: Translations): string {
+  if (message === 'No Modrinth CDN files found in the index.') return t.importErrors.noModrinthCdnFiles;
+  if (message === 'Invalid JSON.') return t.importErrors.invalidJson;
+  if (message === 'File read failed.') return t.importErrors.fileReadFailed;
+  if (message.startsWith('Unsupported format.')) {
+    const detail = message.split('Detail: ')[1] ?? t.importErrors.invalidStructure;
+    const translatedDetail = detail === 'invalid structure' ? t.importErrors.invalidStructure : detail;
+    return `${t.importErrors.unsupportedFormat} ${t.importErrors.detail.replace('{detail}', translatedDetail)}`;
+  }
+  return message;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -294,6 +317,12 @@ function SearchResultSkeletons() {
 export default function Page() {
 
   const t = useLocale();
+  const sourceOptions = [
+    { value: 'modrinth', label: t.filters.sources.modrinth },
+    { value: 'curseforge', label: t.filters.sources.curseforge },
+    { value: 'curseforge-bedrock', label: t.filters.sources.bedrock },
+  ] as const;
+  const contentTypes = CONTENT_TYPES.map(ct => ({ ...ct, label: contentTypeLabel(ct.id, t) }));
 
   // ── MC version list ───────────────────────────────────────────────────────
   const [versions, setVersions] = useState<string[]>([]);
@@ -867,9 +896,9 @@ export default function Page() {
       restoredVersionRef.current = state.version;
       await restoreMods(state);
     } catch (err) {
-      setImportError((err as Error).message);
+      setImportError(translateImportError((err as Error).message, t));
     }
-  }, [restoreMods]);
+  }, [restoreMods, t]);
 
   const handleShare = useCallback(async () => {
     const url = buildShareUrl(getExportState());
@@ -881,16 +910,17 @@ export default function Page() {
     try {
       await navigator.clipboard.writeText(url);
     } catch {
-      prompt('Copy this share URL:', url);
+      prompt(t.footer.copySharePrompt, url);
       return;
     }
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
-  }, [getExportState]);
+  }, [getExportState, t]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   const currentTypeInfo = CONTENT_TYPES.find(t => t.id === filters.contentType)!;
+  const currentTypeLabel = contentTypeLabel(filters.contentType, t);
 
   /** True when this project is already present in the queue (any status). */
   const inQueue = useCallback(
@@ -919,21 +949,17 @@ export default function Page() {
 
           {/* Filters */}
           <div className="py-2 shrink-0">
-            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-1 pb-1.5">Source</p>
+            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-1 pb-1.5">{t.filters.source}</p>
             <div className="px-3.5">
               <CustomSelect
                 value={filters.source}
                 onChange={v => setSource(v as Source)}
-                options={[
-                  { value: 'modrinth',          label: 'Modrinth'   },
-                  { value: 'curseforge',         label: 'CurseForge' },
-                  { value: 'curseforge-bedrock', label: 'Bedrock'    },
-                ]}
+                options={[...sourceOptions]}
                 width="w-full"
               />
             </div>
 
-            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Version</p>
+            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">{t.filters.version}</p>
             <div className="px-3.5">
               <CustomSelect
                 value={filters.version}
@@ -945,7 +971,7 @@ export default function Page() {
 
             {currentTypeInfo.usesLoader && (
               <>
-                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Loader</p>
+                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">{t.filters.loader}</p>
                 <div className="px-3.5">
                   <PillToggle<Loader> options={LOADERS} active={filters.loader} onToggle={setLoader} />
                 </div>
@@ -953,7 +979,7 @@ export default function Page() {
             )}
             {filters.contentType === 'shader' && (
               <>
-                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Renderer</p>
+                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">{t.filters.renderer}</p>
                 <div className="px-3.5">
                   <PillToggle<ShaderLoader> options={SHADER_LOADERS} active={filters.shaderLoader} onToggle={toggleShaderLoader} />
                 </div>
@@ -961,7 +987,7 @@ export default function Page() {
             )}
             {filters.contentType === 'plugin' && (
               <>
-                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">Platform</p>
+                <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-2.5 pb-1.5">{t.filters.platform}</p>
                 <div className="px-3.5">
                   <PillToggle<PluginLoader> options={PLUGIN_LOADERS} active={filters.pluginLoader} onToggle={togglePluginLoader} />
                 </div>
@@ -974,8 +1000,8 @@ export default function Page() {
 
           {/* Content type nav */}
           <div className="py-1 overflow-y-auto">
-            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-1 pb-1.5">Content type</p>
-            {CONTENT_TYPES.filter(ct => ct.sources.includes(filters.source)).map(ct => {
+            <p className="text-mono text-[9px] font-medium text-ink-tertiary uppercase tracking-widest px-3.5 pt-1 pb-1.5">{t.filters.contentType}</p>
+            {contentTypes.filter(ct => ct.sources.includes(filters.source)).map(ct => {
               const Icon = CONTENT_TYPE_ICONS[ct.id];
               return (
                 <button
@@ -1022,7 +1048,7 @@ export default function Page() {
                 </div>
                 <span className="text-[13px] font-semibold tracking-tight">dynrinth</span>
               </div>
-              {CONTENT_TYPES.filter(ct => ct.sources.includes(filters.source)).map(ct => (
+               {contentTypes.filter(ct => ct.sources.includes(filters.source)).map(ct => (
                 <button
                   key={ct.id}
                   onClick={() => setContentType(ct.id)}
@@ -1040,18 +1066,14 @@ export default function Page() {
                 href="/rankings"
                 className="ml-auto text-[11px] text-ink-secondary hover:text-ink-primary transition-colors whitespace-nowrap shrink-0"
               >
-                Rankings
+                {t.rankings.title}
               </a>
             </div>
             <div className="flex items-center gap-3 px-5 py-2 flex-wrap">
               <CustomSelect
                 value={filters.source}
                 onChange={v => setSource(v as Source)}
-                options={[
-                  { value: 'modrinth',          label: 'Modrinth'   },
-                  { value: 'curseforge',         label: 'CurseForge' },
-                  { value: 'curseforge-bedrock', label: 'Bedrock'    },
-                ]}
+                options={[...sourceOptions]}
                 width="w-32"
               />
               <CustomSelect
@@ -1141,7 +1163,7 @@ export default function Page() {
               <div className="px-4 py-2 bg-brand-glow border-b border-brand/30 text-brand text-xs flex items-center gap-2">
                 <InformationCircleIcon className="w-4 h-4 shrink-0" />
                 <span>{t.fallback.banner
-                  .replace('{type}', currentTypeInfo.label.toLowerCase())
+                  .replace('{type}', currentTypeLabel.toLowerCase())
                   .replace('{version}', filters.version)
                   .replace('{fallback}', fallbackVersion ?? '')
                 }</span>
@@ -1163,7 +1185,7 @@ export default function Page() {
                 <span>
                   {t.search.noResultsFor}{' '}
                   <strong className="text-ink-primary">
-                    {activeRef.current.query || currentTypeInfo.label}
+                    {activeRef.current.query || currentTypeLabel}
                   </strong>
                   {activeRef.current.query && (
                     <><br />{t.search.withVersion} {filters.version}</>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getEvents, clearEvents, subscribe, type DebugEvent } from '@/lib/debugCapture';
+import { useLocale } from '@/lib/i18n';
 
 // Only mount in development
 const IS_DEV = process.env.NODE_ENV === 'development';
@@ -29,11 +30,12 @@ function eventColor(type: DebugEvent['type']): string {
 
 function EventRow({ e }: { e: DebugEvent }) {
   const [open, setOpen] = useState(false);
+  const t = useLocale();
 
   const summary = (() => {
     switch (e.type) {
       case 'search':
-        return `"${e.query || '(browse)'}" → ${e.resultCount} hits · ${e.durationMs}ms${e.cacheHit ? ' [cache]' : ''}${e.fallbackStrategy !== 'none' ? ` [${e.fallbackStrategy}]` : ''}`;
+        return `"${e.query || `(${t.debug.browse})`}" → ${e.resultCount} ${t.debug.hits} · ${e.durationMs}ms${e.cacheHit ? ' [cache]' : ''}${e.fallbackStrategy !== 'none' ? ` [${e.fallbackStrategy}]` : ''}`;
       case 'search_error':
         return `"${e.query}" ERROR: ${e.message}`;
       case 'zero_results':
@@ -43,9 +45,9 @@ function EventRow({ e }: { e: DebugEvent }) {
       case 'queue_add':
         return `+queue "${e.title}"`;
       case 'queue_download':
-        return `download ${e.itemCount} files · ${e.format}`;
+        return `${t.debug.download} ${e.itemCount} ${t.debug.files} · ${e.format}`;
       case 'load_more':
-        return `load more @${e.offset} → +${e.resultCount} · ${e.durationMs}ms`;
+        return `${t.debug.loadMore} @${e.offset} → +${e.resultCount} · ${e.durationMs}ms`;
     }
   })();
 
@@ -82,6 +84,7 @@ function PanelInner() {
   const [collapsed, setCollapsed] = useState(true);
   const [copied, setCopied] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const t = useLocale();
 
   useEffect(() => subscribe(() => setEvents(getEvents())), []);
 
@@ -121,7 +124,7 @@ function PanelInner() {
       <button
         onClick={() => setCollapsed(false)}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#07090a]/90 border border-[#1f2d3d] text-[10px] font-mono text-[#4a6a88] hover:text-[#7099bb] hover:border-[#273848] transition-colors backdrop-blur-sm"
-        title="Open debug panel (Ctrl+Shift+D)"
+        title={t.debug.open}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-[#1bd96a]" />
         dbg · {events.length}
@@ -135,20 +138,20 @@ function PanelInner() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#1f2d3d] shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-[#1bd96a]" />
-          <span className="text-[11px] font-mono text-[#7099bb]">debug · {events.length} events</span>
+          <span className="text-[11px] font-mono text-[#7099bb]">debug · {events.length} {t.debug.events}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={copyJSON}
             className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#1f2d3d] text-[#4a6a88] hover:text-[#7099bb] hover:border-[#273848] transition-colors"
           >
-            {copied ? 'copied!' : 'copy JSON'}
+            {copied ? t.debug.copied : t.debug.copyJson}
           </button>
           <button
             onClick={() => { clearEvents(); }}
             className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#1f2d3d] text-[#4a6a88] hover:text-[#ef4444] hover:border-[#ef4444]/40 transition-colors"
           >
-            clear
+            {t.debug.clear}
           </button>
           <button
             onClick={() => setCollapsed(true)}
@@ -163,7 +166,7 @@ function PanelInner() {
       <div ref={listRef} className="flex-1 overflow-y-auto">
         {events.length === 0 ? (
           <div className="flex items-center justify-center h-16 text-[11px] text-[#2d4a66] font-mono">
-            no events yet
+            {t.debug.noEvents}
           </div>
         ) : (
           events.map((e, i) => <EventRow key={i} e={e} />)
@@ -172,7 +175,7 @@ function PanelInner() {
 
       {/* Footer hint */}
       <div className="px-3 py-1.5 border-t border-[#1f2d3d] shrink-0">
-        <span className="text-[9px] font-mono text-[#2d4a66]">Ctrl+Shift+D · click row to expand · copy JSON to share</span>
+        <span className="text-[9px] font-mono text-[#2d4a66]">{t.debug.hint}</span>
       </div>
     </div>
   );

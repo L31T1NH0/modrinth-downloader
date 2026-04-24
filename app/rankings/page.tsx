@@ -1,11 +1,17 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { RankingsClient } from './RankingsClient';
 import { fetchRankings } from '@/lib/rankings';
+import { detectLocaleFromLanguage, getTranslations } from '@/lib/i18n-core';
 
-export const metadata: Metadata = {
-  title: 'Rankings – Dynrinth',
-  description: 'Most downloaded Minecraft mods through Dynrinth',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = detectLocaleFromLanguage((await headers()).get('accept-language'));
+  const t = getTranslations(locale);
+  return {
+    title: t.meta.rankingsTitle,
+    description: t.meta.rankingsDescription,
+  };
+}
 
 async function getRankings() {
   try {

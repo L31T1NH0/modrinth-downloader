@@ -49,6 +49,7 @@ export const tr: typeof en = {
     restoring:        'Geri yükleniyor...',
     share:            'Paylaş',
     shareTitle:       'Paylaşılabilir URL\'yi kopyala',
+    copySharePrompt:  'Bu paylaşım URL\'sini kopyalayın:',
     copied:           'Kopyalandı!',
     downloadFile:     'Dosyayı indir',
     downloadFiles:    '{n} dosyayı indir',
@@ -76,6 +77,78 @@ export const tr: typeof en = {
   nav: {
     search: 'Ara',
     queue:  'Kuyruk',
+  },
+
+  filters: {
+    source:      'Kaynak',
+    version:     'Sürüm',
+    loader:      'Loader',
+    renderer:    'Renderer',
+    platform:    'Platform',
+    contentType: 'İçerik türü',
+    sources: {
+      modrinth:   'Modrinth',
+      curseforge: 'CurseForge',
+      bedrock:    'Bedrock',
+    },
+    contentTypes: {
+      mod:            'Modlar',
+      plugin:         'Eklentiler',
+      datapack:       'Veri paketleri',
+      resourcepack:   'Kaynak paketleri',
+      shader:         'Shaderlar',
+      addon:          'Add-on\'lar',
+      map:            'Haritalar',
+      'texture-pack': 'Doku paketleri',
+      script:         'Scriptler',
+      skin:           'Skinler',
+    },
+  },
+
+  rankings: {
+    title:            'Sıralamalar',
+    mostDownloaded:   'En Çok İndirilenler',
+    tracked:          'İzlenen',
+    downloads:        'İndirmeler',
+    loading:          'Sıralamalar yükleniyor...',
+    empty:            '{type} için henüz sıralama yok',
+    emptyHint:        'Başlamak için Dynrinth üzerinden bir şey indirin!',
+    alreadyInQueue:   'Zaten kuyrukta',
+    addToQueueTitle:  'Kuyruğa ekle - {version} - {loader}',
+    openToSetVersion: 'Önce bir Minecraft sürümü seçmek için Dynrinth\'i açın',
+    searchOnDynrinth: 'Dynrinth\'te "{name}" ara',
+    viewOnPlatform:   'Platformda görüntüle',
+    tracking:         'İndirmeler Dynrinth üzerinden izleniyor',
+  },
+
+  importErrors: {
+    noModrinthCdnFiles: 'Dizinde Modrinth CDN dosyası bulunamadı.',
+    unsupportedFormat:  'Desteklenmeyen format. Beklenen: ModListState v1/v2 veya uyumlu takma adlar.',
+    invalidJson:        'Geçersiz JSON.',
+    fileReadFailed:     'Dosya okunamadı.',
+    invalidStructure:   'geçersiz yapı',
+    detail:             'Ayrıntı: {detail}',
+  },
+
+  debug: {
+    browse:    'gezinti',
+    hits:      'sonuç',
+    download:  'indir',
+    files:     'dosya',
+    loadMore:  'daha fazla yükle',
+    open:      'Hata ayıklama panelini aç (Ctrl+Shift+D)',
+    hint:      'Ctrl+Shift+D - satıra tıklayıp genişlet - paylaşmak için JSON kopyala',
+    events:    'olay',
+    copied:    'kopyalandı!',
+    copyJson:  'JSON kopyala',
+    clear:     'temizle',
+    noEvents:  'henüz olay yok',
+  },
+
+  meta: {
+    homeDescription:     'Minecraft modlarını Modrinth ve CurseForge\'dan kolayca ara ve indir',
+    rankingsTitle:       'Sıralamalar - Dynrinth',
+    rankingsDescription: 'Dynrinth üzerinden en çok indirilen Minecraft içerikleri',
   },
 
   mobileSuggestion: {

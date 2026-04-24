@@ -22,7 +22,7 @@ export function CustomSelect({ value, onChange, options, placeholder, width = 'w
   const menuRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find(opt => opt.value === value);
-  const displayLabel = selectedOption?.label || placeholder || 'Select...';
+  const displayLabel = selectedOption?.label || placeholder || '...';
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
