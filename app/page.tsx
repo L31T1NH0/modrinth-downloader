@@ -19,6 +19,7 @@ import { useQueue, type QueueItemStatus } from '@/hooks/useQueue';
 import { useRestoreMods } from '@/hooks/useRestoreMods';
 import { useFilters } from '@/hooks/useFilters';
 import { useSearch, PAGE_SIZE, MIN_QUERY_LENGTH } from '@/hooks/useSearch';
+import { useVersionMigration } from '@/hooks/useVersionMigration';
 import {
   LOADERS, SHADER_LOADERS, PLUGIN_LOADERS, CONTENT_TYPES, CONTENT_TYPE_ICONS,
 } from '@/lib/filterConfig';
@@ -190,6 +191,8 @@ export default function Page() {
   const search = useSearch(filters, versions);
   const queue  = useQueue();
   const { isRestoring, failedCount, restoreMods } = useRestoreMods(queue, setFilters);
+  const { migration, check, confirm: confirmMigration, dismiss: dismissMigration } =
+    useVersionMigration(filters, queue, restoreMods);
 
   const sourceOptions = [
     { value: 'modrinth',           label: t.filters.sources.modrinth  },
@@ -699,6 +702,89 @@ export default function Page() {
 
           {/* Queue items */}
           <div className="flex-1 overflow-y-auto">
+
+            {/* ── Version migration banner ────────────────────────────────── */}
+            {migration && (
+              <div className="mx-3 mt-3 mb-1 rounded-lg border border-line animate-slideIn overflow-hidden">
+                {migration.phase === 'prompt' && (
+                  <div className="px-3 py-2.5 flex flex-col gap-2">
+                    <div className="flex items-start gap-2">
+                      <p className="flex-1 text-[10px] text-ink-secondary leading-relaxed">
+                        {t.migration.prompt
+                          .replace('{n}',    String(migration.modIds.length))
+                          .replace('{from}', migration.sourceVersion)}
+                      </p>
+                      <button
+                        onClick={dismissMigration}
+                        className="text-ink-muted hover:text-ink-primary transition-colors shrink-0 mt-px"
+                        title={t.migration.dismiss}
+                      >
+                        <XMarkIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => void check()}
+                      className="w-full h-7 rounded-md bg-bg-hover text-ink-primary text-[10px] font-medium flex items-center justify-center gap-1.5 transition-all hover:bg-line-subtle"
+                    >
+                      <ArrowPathIcon className="w-3 h-3 text-brand" />
+                      {t.migration.check.replace('{to}', filters.version)}
+                    </button>
+                  </div>
+                )}
+
+                {migration.phase === 'checking' && (
+                  <div className="flex items-center gap-2 px-3 py-3 text-ink-secondary">
+                    <Spinner size={11} />
+                    <span className="text-[10px]">
+                      {t.migration.checking
+                        .replace('{n}',  String(migration.modIds.length))
+                        .replace('{to}', filters.version)}
+                    </span>
+                  </div>
+                )}
+
+                {migration.phase === 'result' && (
+                  <div className="px-3 py-2.5">
+                    <div className="flex items-start gap-1.5 mb-2.5">
+                      {migration.incompatible === 0
+                        ? <CheckCircleIcon className="w-3.5 h-3.5 text-brand shrink-0 mt-px" />
+                        : <ExclamationTriangleIcon className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-px" />
+                      }
+                      <p className="text-[10px] text-ink-secondary leading-snug">
+                        <span className="text-ink-primary font-medium">
+                          {t.migration.compatible.replace('{ok}', String(migration.compatible))}
+                        </span>
+                        {' · '}
+                        <span className={migration.incompatible > 0 ? 'text-amber-400 font-medium' : 'text-ink-tertiary'}>
+                          {t.migration.incompatible
+                            .replace('{fail}', String(migration.incompatible))
+                            .replace('{to}',   filters.version)}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => void confirmMigration()}
+                        disabled={isRestoring}
+                        className="flex-1 h-7 rounded-md bg-brand text-brand-dark text-[10px] font-semibold flex items-center justify-center gap-1 transition-all hover:bg-brand-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {isRestoring
+                          ? <Spinner size={10} />
+                          : <><ArrowPathIcon className="w-3 h-3" />{t.migration.migrate}</>
+                        }
+                      </button>
+                      <button
+                        onClick={dismissMigration}
+                        className="flex-1 h-7 rounded-md bg-bg-hover text-ink-secondary text-[10px] font-medium flex items-center justify-center transition-colors hover:text-ink-primary hover:bg-line-subtle"
+                      >
+                        {t.migration.dismiss}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {queue.entries.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-tertiary">
                 <ArchiveBoxIcon className="w-8 h-8 text-ink-secondary opacity-40" />

@@ -72,6 +72,16 @@ export const en = {
     listTooLarge: 'List too large for a URL — use Export instead.',
   },
 
+  migration: {
+    prompt:      '{n} mods from {from} — version change detected',
+    checking:    'Checking {n} mods for {to}…',
+    compatible:  '{ok} compatible',
+    incompatible: '{fail} incompatible for {to}',
+    check:       'Verify for {to}',
+    migrate:     'Migrate',
+    dismiss:     'Dismiss',
+  },
+
   nav: {
     search: 'Search',
     queue:  'Queue',

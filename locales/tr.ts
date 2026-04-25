@@ -74,6 +74,16 @@ export const tr: typeof en = {
     listTooLarge: 'Liste URL için çok büyük — bunun yerine Dışa Aktar kullanın.',
   },
 
+  migration: {
+    prompt:      '{from} sürümünden {n} mod — sürüm değişikliği algılandı',
+    checking:    '{n} mod {to} için kontrol ediliyor…',
+    compatible:  '{ok} uyumlu',
+    incompatible: '{fail} uyumsuz ({to} için)',
+    check:       '{to} için doğrula',
+    migrate:     'Geçir',
+    dismiss:     'Kapat',
+  },
+
   nav: {
     search: 'Ara',
     queue:  'Kuyruk',

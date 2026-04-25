@@ -74,6 +74,16 @@ export const de: typeof en = {
     listTooLarge: 'Liste zu groß für eine URL — stattdessen Exportieren verwenden.',
   },
 
+  migration: {
+    prompt:      '{n} Mods von {from} — Versionsänderung erkannt',
+    checking:    '{n} Mods für {to} werden geprüft…',
+    compatible:  '{ok} kompatibel',
+    incompatible: '{fail} inkompatibel für {to}',
+    check:       'Für {to} prüfen',
+    migrate:     'Migrieren',
+    dismiss:     'Verwerfen',
+  },
+
   nav: {
     search: 'Suche',
     queue:  'Warteschlange',
