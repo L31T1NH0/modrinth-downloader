@@ -176,5 +176,6 @@ export const en = {
     copied:     'Copied!',
     generating: 'Generating...',
     error:      'Failed to generate code',
+    preview:    'Preview',
   },
 };

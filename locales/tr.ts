@@ -178,5 +178,6 @@ export const tr: typeof en = {
     copied:     'Kopyalandı!',
     generating: 'Oluşturuluyor...',
     error:      'Kod oluşturulamadı',
+    preview:    'Önizleme',
   },
 };

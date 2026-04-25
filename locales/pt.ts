@@ -178,5 +178,6 @@ export const pt: typeof en = {
     copied:     'Copiado!',
     generating: 'Gerando...',
     error:      'Erro ao gerar código',
+    preview:    'Preview',
   },
 };

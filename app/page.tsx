@@ -1008,17 +1008,27 @@ export default function Page() {
             </button>
 
             {mcCode && (
-              <div className="mb-2.5 flex items-center gap-2 rounded-lg bg-bg-surface px-3 py-2">
-                <span className="text-[10px] text-ink-tertiary shrink-0">{t.minecraft.prompt}</span>
-                <code className="flex-1 text-[11px] font-mono text-brand truncate">
-                  {t.minecraft.command.replace('{code}', mcCode)}
-                </code>
-                <button
-                  onClick={() => handleMcCodeCopy(mcCode)}
-                  className="shrink-0 text-[10px] text-ink-secondary hover:text-white transition-colors"
+              <div className="mb-2.5 flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 rounded-lg bg-bg-surface px-3 py-2">
+                  <span className="text-[10px] text-ink-tertiary shrink-0">{t.minecraft.prompt}</span>
+                  <code className="flex-1 text-[11px] font-mono text-brand truncate">
+                    {t.minecraft.command.replace('{code}', mcCode)}
+                  </code>
+                  <button
+                    onClick={() => handleMcCodeCopy(mcCode)}
+                    className="shrink-0 text-[10px] text-ink-secondary hover:text-white transition-colors"
+                  >
+                    {mcCodeCopied ? t.minecraft.copied : <ClipboardIcon className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <a
+                  href={`/pack/${mcCode}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-ink-tertiary hover:text-brand transition-colors text-center"
                 >
-                  {mcCodeCopied ? t.minecraft.copied : <ClipboardIcon className="w-3.5 h-3.5" />}
-                </button>
+                  {t.minecraft.preview} ↗
+                </a>
               </div>
             )}
 

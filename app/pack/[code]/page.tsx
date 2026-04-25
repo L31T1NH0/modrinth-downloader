@@ -7,24 +7,30 @@ import { migrate } from '@/lib/stateSchema';
 import CopyButton from './CopyButton';
 
 interface ModrinthProject {
-  project_id: string;
-  slug:       string;
-  title:      string;
+  id:          string;
+  slug:        string;
+  title:       string;
   description: string;
-  icon_url:   string | null;
-  downloads:  number;
+  icon_url:    string | null;
+  downloads:   number;
 }
 
 async function fetchProjects(ids: string[]): Promise<ModrinthProject[]> {
   if (ids.length === 0) return [];
-  const res = await fetch(
-    `https://api.modrinth.com/v2/projects?ids=${encodeURIComponent(JSON.stringify(ids))}`,
-    {
-      headers: { 'User-Agent': 'dynrinth/1.0 (dynrinth.vercel.app)' },
-      next: { revalidate: 3600 },
-    },
-  );
-  return res.ok ? res.json() : [];
+  try {
+    const res = await fetch(
+      `https://api.modrinth.com/v2/projects?ids=${encodeURIComponent(JSON.stringify(ids))}`,
+      {
+        headers: { 'User-Agent': 'dynrinth/1.0 (dynrinth.vercel.app)' },
+        next: { revalidate: 3600 },
+      },
+    );
+    if (!res.ok) return [];
+    const data: unknown = await res.json();
+    return Array.isArray(data) ? (data as ModrinthProject[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata(
@@ -57,7 +63,7 @@ export default async function PackPage(
   if (!state) notFound();
 
   const projects  = await fetchProjects(state.mods);
-  const byId      = new Map(projects.map(p => [p.project_id, p]));
+  const byId      = new Map(projects.map(p => [p.id, p]));
   const command   = `/dynrinth ${code}`;
   const loader    = state.loader ?? 'fabric';
 
@@ -101,7 +107,7 @@ export default async function PackPage(
                 {p ? (
                   <>
                     <a
-                      href={`https://modrinth.com/mod/${p.slug}`}
+                      href={`https://modrinth.com/project/${p.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-ink-primary font-semibold text-[14px] hover:text-brand transition-colors"
