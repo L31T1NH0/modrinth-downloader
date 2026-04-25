@@ -6,7 +6,7 @@ import {
   MagnifyingGlassIcon, PlusIcon, CheckIcon, CheckCircleIcon, XMarkIcon,
   ArrowUpTrayIcon, ArrowDownTrayIcon, LinkIcon, ArrowPathIcon,
   ExclamationTriangleIcon, InformationCircleIcon, ArchiveBoxIcon, CubeIcon,
-  TrophyIcon,
+  TrophyIcon, ClipboardIcon,
 } from '@heroicons/react/24/outline';
 import { CloudArrowDownIcon } from '@heroicons/react/24/solid';
 import { TextClamp } from '@/components/TextClamp';
@@ -221,6 +221,15 @@ export default function Page() {
   const [addedSnackbar, setAddedSnackbar] = useState(false);
   const addedSnackbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [justAddedIds, setJustAddedIds] = useState<Set<string>>(new Set());
+  const justAddedTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // ── Minecraft code share ──────────────────────────────────────────────────
+  const [mcCode,         setMcCode]         = useState<string | null>(null);
+  const [mcCodeCopied,   setMcCodeCopied]   = useState(false);
+  const [mcCodeLoading,  setMcCodeLoading]  = useState(false);
+  const mcCodeCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Archive format ────────────────────────────────────────────────────────
   const [archiveFormat, setArchiveFormat] = useState<'zip' | 'tar.gz'>('zip');
 
@@ -300,6 +309,38 @@ export default function Page() {
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
   }, [getExportState, t]);
+
+  const handleMinecraftShare = useCallback(async () => {
+    setMcCodeLoading(true);
+    setMcCode(null);
+    try {
+      const res = await fetch('/api/codes', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ state: getExportState() }),
+      });
+      if (!res.ok) throw new Error('failed');
+      const { code } = await res.json() as { code: string };
+      setMcCode(code);
+    } catch {
+      setImportError(t.minecraft.error);
+    } finally {
+      setMcCodeLoading(false);
+    }
+  }, [getExportState, t]);
+
+  const handleMcCodeCopy = useCallback(async (code: string) => {
+    const cmd = t.minecraft.command.replace('{code}', code);
+    try {
+      await navigator.clipboard.writeText(cmd);
+    } catch {
+      prompt(cmd);
+      return;
+    }
+    setMcCodeCopied(true);
+    if (mcCodeCopyTimer.current) clearTimeout(mcCodeCopyTimer.current);
+    mcCodeCopyTimer.current = setTimeout(() => setMcCodeCopied(false), 2000);
+  }, [t]);
 
   const inQueue = useCallback(
     (id: string) => queue.entries.some(e => e.id === id),
@@ -574,10 +615,11 @@ export default function Page() {
             {search.results.length > 0 && (
               <div>
                 {search.results.map((item, i) => {
-                  const isNew    = i >= search.offset - PAGE_SIZE && !search.animatedIds.current.has(item.project_id);
-                  const queued   = inQueue(item.project_id);
-                  const qEntry   = queue.entries.find(e => e.id === item.project_id);
-                  const isActive = qEntry?.status === 'pending' || qEntry?.status === 'resolving';
+                  const isNew      = i >= search.offset - PAGE_SIZE && !search.animatedIds.current.has(item.project_id);
+                  const queued     = inQueue(item.project_id);
+                  const qEntry     = queue.entries.find(e => e.id === item.project_id);
+                  const isActive   = qEntry?.status === 'pending' || qEntry?.status === 'resolving';
+                  const justAdded  = justAddedIds.has(item.project_id);
 
                   if (isNew) search.animatedIds.current.add(item.project_id);
 
@@ -631,23 +673,36 @@ export default function Page() {
                       </div>
 
                       <button
-                        disabled={queued}
+                        disabled={isActive}
                         onClick={() => {
-                          queue.add(item.project_id, item.title, item.icon_url, filters);
-                          captureEvent({ type: 'queue_add', ts: Date.now(), id: item.project_id, title: item.title, source: filters.source, contentType: filters.contentType });
-                          if (addedSnackbarTimerRef.current) clearTimeout(addedSnackbarTimerRef.current);
-                          setAddedSnackbar(true);
-                          addedSnackbarTimerRef.current = setTimeout(() => setAddedSnackbar(false), 2000);
+                          if (queued && qEntry) {
+                            queue.remove(qEntry.queueKey);
+                          } else {
+                            queue.add(item.project_id, item.title, item.icon_url, filters);
+                            captureEvent({ type: 'queue_add', ts: Date.now(), id: item.project_id, title: item.title, source: filters.source, contentType: filters.contentType });
+                            if (addedSnackbarTimerRef.current) clearTimeout(addedSnackbarTimerRef.current);
+                            setAddedSnackbar(true);
+                            addedSnackbarTimerRef.current = setTimeout(() => setAddedSnackbar(false), 2000);
+                            setJustAddedIds(prev => new Set(prev).add(item.project_id));
+                            const existing = justAddedTimersRef.current.get(item.project_id);
+                            if (existing) clearTimeout(existing);
+                            justAddedTimersRef.current.set(item.project_id, setTimeout(() => {
+                              setJustAddedIds(prev => { const s = new Set(prev); s.delete(item.project_id); return s; });
+                              justAddedTimersRef.current.delete(item.project_id);
+                            }, 800));
+                          }
                         }}
                         className={[
                           'no-ring w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150 leading-none self-center',
-                          queued && !isActive
-                            ? 'bg-brand-glow text-brand cursor-default'
-                            : isActive
+                          isActive
                             ? 'bg-bg-card text-ink-tertiary cursor-wait'
+                            : queued && !justAdded
+                            ? 'bg-brand-glow text-brand hover:bg-red-500/10 hover:text-red-400 active:scale-95'
+                            : queued
+                            ? 'bg-brand-glow text-brand cursor-default'
                             : 'bg-bg-card text-ink-secondary hover:text-brand hover:bg-brand-glow active:scale-95',
                         ].join(' ')}
-                        title={queued ? t.queue.inQueue : t.queue.addToQueue}
+                        title={queued ? t.queue.removeTitle : t.queue.addToQueue}
                       >
                         {isActive
                           ? <Spinner size={12} />
@@ -798,6 +853,9 @@ export default function Page() {
                 const isTransient = entry.status === 'pending' || entry.status === 'resolving';
                 const isError     = entry.status === 'error';
                 const slbl        = statusLabel(entry.status, t);
+                const conflicts   = queue.conflictWarnings.filter(
+                  w => w.queueKeyA === entry.queueKey || w.queueKeyB === entry.queueKey,
+                );
                 return (
                   <div
                     key={entry.queueKey}
@@ -842,6 +900,16 @@ export default function Page() {
                           {lbl ? ` · ${lbl}` : ''}
                         </div>
                       )}
+
+                      {conflicts.map(w => {
+                        const otherTitle = w.queueKeyA === entry.queueKey ? w.titleB : w.titleA;
+                        return (
+                          <div key={w.queueKeyA + w.queueKeyB} className="text-[10px] text-amber-400 mt-0.5 flex items-center gap-1">
+                            <ExclamationTriangleIcon className="w-3 h-3 shrink-0" />
+                            {t.queue.conflictWith.replace('{title}', otherTitle)}
+                          </div>
+                        );
+                      })}
 
                       {entry.status === 'downloading' && entry.progress > 0 && (
                         <div className="mt-1 h-0.5 bg-line-subtle rounded-full overflow-hidden">
@@ -927,6 +995,33 @@ export default function Page() {
               </button>
             </div>
 
+            <button
+              onClick={handleMinecraftShare}
+              disabled={isRestoring || mcCodeLoading || queue.entries.length === 0}
+              className="w-full h-8 rounded-lg bg-bg-surface text-ink-primary text-[11px] font-medium flex items-center justify-center gap-1.5 mb-2.5 transition-all hover:text-white hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
+              title={t.minecraft.shareTitle}
+            >
+              {mcCodeLoading
+                ? <><Spinner size={11} /> {t.minecraft.generating}</>
+                : <><CubeIcon className="w-[11px] h-[11px]" /> {t.minecraft.share}</>
+              }
+            </button>
+
+            {mcCode && (
+              <div className="mb-2.5 flex items-center gap-2 rounded-lg bg-bg-surface px-3 py-2">
+                <span className="text-[10px] text-ink-tertiary shrink-0">{t.minecraft.prompt}</span>
+                <code className="flex-1 text-[11px] font-mono text-brand truncate">
+                  {t.minecraft.command.replace('{code}', mcCode)}
+                </code>
+                <button
+                  onClick={() => handleMcCodeCopy(mcCode)}
+                  className="shrink-0 text-[10px] text-ink-secondary hover:text-white transition-colors"
+                >
+                  {mcCodeCopied ? t.minecraft.copied : <ClipboardIcon className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            )}
+
             {failedCount !== null && failedCount > 0 && (
               <div className="mb-2 text-[10px] text-amber-400 text-center">
                 {(failedCount > 1 ? t.footer.failedModsPlural : t.footer.failedMods).replace('{n}', String(failedCount))}
@@ -935,6 +1030,16 @@ export default function Page() {
 
             {importError && (
               <div className="mb-2 text-[10px] text-red-err text-center">{importError}</div>
+            )}
+
+            {queue.conflictWarnings.length > 0 && !queue.isDownloading && (
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] text-amber-400">
+                <ExclamationTriangleIcon className="w-3.5 h-3.5 shrink-0" />
+                {(queue.conflictWarnings.length > 1
+                  ? t.queue.conflictBannerPlural
+                  : t.queue.conflictBanner
+                ).replace('{n}', String(queue.conflictWarnings.length))}
+              </div>
             )}
 
             {queue.isDownloading ? (

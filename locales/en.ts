@@ -29,8 +29,11 @@ export const en = {
     addToQueue:  'Add to queue',
     inQueue:     'In queue',
     dep:         'dep',
-    retryTitle:  'Try again',
-    removeTitle: 'Remove',
+    retryTitle:    'Try again',
+    removeTitle:   'Remove',
+    conflictWith:  'Conflicts with {title}',
+    conflictBanner: '{n} conflict detected — download anyway?',
+    conflictBannerPlural: '{n} conflicts detected — download anyway?',
   },
 
   errors: {
@@ -163,5 +166,15 @@ export const en = {
     text:   'On mobile, Bedrock usually works better. Switch now?',
     keep:   'Keep',
     switch: 'Switch',
+  },
+
+  minecraft: {
+    share:      'Minecraft',
+    shareTitle: 'Generate code to install via mod',
+    prompt:     'Type in Minecraft:',
+    command:    '/dynrinth {code}',
+    copied:     'Copied!',
+    generating: 'Generating...',
+    error:      'Failed to generate code',
   },
 };

@@ -31,8 +31,11 @@ export const tr: typeof en = {
     addToQueue:  'Kuyruğa ekle',
     inQueue:     'Kuyrukta',
     dep:         'bağ.',
-    retryTitle:  'Tekrar dene',
-    removeTitle: 'Kaldır',
+    retryTitle:    'Tekrar dene',
+    removeTitle:   'Kaldır',
+    conflictWith:  '{title} ile çakışma',
+    conflictBanner: '{n} çakışma tespit edildi — yine de indirilsin mi?',
+    conflictBannerPlural: '{n} çakışma tespit edildi — yine de indirilsin mi?',
   },
 
   errors: {
@@ -165,5 +168,15 @@ export const tr: typeof en = {
     text:   'Mobilde Bedrock genellikle daha iyi çalışır. Şimdi geçelim mi?',
     keep:   'Kalsın',
     switch: 'Geç',
+  },
+
+  minecraft: {
+    share:      'Minecraft',
+    shareTitle: 'Mod aracılığıyla kurulum için kod oluştur',
+    prompt:     'Minecraft\'ta yaz:',
+    command:    '/dynrinth {code}',
+    copied:     'Kopyalandı!',
+    generating: 'Oluşturuluyor...',
+    error:      'Kod oluşturulamadı',
   },
 };

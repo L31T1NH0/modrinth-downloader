@@ -31,8 +31,11 @@ export const de: typeof en = {
     addToQueue:  'Zur Warteschlange hinzufügen',
     inQueue:     'In der Warteschlange',
     dep:         'Abh.',
-    retryTitle:  'Erneut versuchen',
-    removeTitle: 'Entfernen',
+    retryTitle:    'Erneut versuchen',
+    removeTitle:   'Entfernen',
+    conflictWith:  'Konflikt mit {title}',
+    conflictBanner: '{n} Konflikt erkannt — trotzdem herunterladen?',
+    conflictBannerPlural: '{n} Konflikte erkannt — trotzdem herunterladen?',
   },
 
   errors: {
@@ -165,5 +168,15 @@ export const de: typeof en = {
     text:   'Auf Mobilgeräten funktioniert Bedrock meist besser. Jetzt wechseln?',
     keep:   'Behalten',
     switch: 'Wechseln',
+  },
+
+  minecraft: {
+    share:      'Minecraft',
+    shareTitle: 'Code zum Installieren per Mod generieren',
+    prompt:     'Im Minecraft eingeben:',
+    command:    '/dynrinth {code}',
+    copied:     'Kopiert!',
+    generating: 'Wird generiert...',
+    error:      'Fehler beim Generieren des Codes',
   },
 };

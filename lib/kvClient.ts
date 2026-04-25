@@ -29,3 +29,13 @@ export async function kvPipeline(commands: KvCommand[]): Promise<KvPipelineResul
 export function kvAvailable(): boolean {
   return getKvConfig() !== null;
 }
+
+export async function kvGet(key: string): Promise<string | null> {
+  const results = await kvPipeline([['GET', key]]);
+  const r = results[0]?.result;
+  return typeof r === 'string' ? r : null;
+}
+
+export async function kvSet(key: string, value: string): Promise<void> {
+  await kvPipeline([['SET', key, value]]);
+}

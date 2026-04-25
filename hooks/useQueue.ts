@@ -48,27 +48,37 @@ export interface DependencyWarning {
   reason:         FailureReason;
 }
 
+export interface ConflictWarning {
+  queueKeyA: string;
+  titleA:    string;
+  queueKeyB: string;
+  titleB:    string;
+}
+
 interface QueueState {
   entries:            QueueEntry[];
   dependencyWarnings: DependencyWarning[];
+  conflictWarnings:   ConflictWarning[];
   isDownloading:      boolean;
   zipProgress:        number;
 }
 
 type QueueAction =
-  | { type: 'ADD';              entry: Omit<QueueEntry, 'queueKey' | 'progress'> }
-  | { type: 'REMOVE';           queueKey: string }
-  | { type: 'RESOLVE';          queueKey: string; version: ResolvedVersion }
-  | { type: 'ERROR';            queueKey: string; reason: QueueEntry['errorReason'] }
-  | { type: 'RETRY';            queueKey: string }
-  | { type: 'SET_STATUS';       queueKey: string; status: QueueItemStatus }
-  | { type: 'SET_PROGRESS';     queueKey: string; progress: number }
-  | { type: 'ADD_DEP_WARNING';  warning: DependencyWarning }
-  | { type: 'CLEAR_DEP_WARNINGS'; parentQueueKey: string }
-  | { type: 'SET_DOWNLOADING';  value: boolean }
-  | { type: 'SET_ZIP_PROGRESS'; progress: number }
+  | { type: 'ADD';                   entry: Omit<QueueEntry, 'queueKey' | 'progress'> }
+  | { type: 'REMOVE';                queueKey: string }
+  | { type: 'RESOLVE';               queueKey: string; version: ResolvedVersion }
+  | { type: 'ERROR';                 queueKey: string; reason: QueueEntry['errorReason'] }
+  | { type: 'RETRY';                 queueKey: string }
+  | { type: 'SET_STATUS';            queueKey: string; status: QueueItemStatus }
+  | { type: 'SET_PROGRESS';          queueKey: string; progress: number }
+  | { type: 'ADD_DEP_WARNING';       warning: DependencyWarning }
+  | { type: 'CLEAR_DEP_WARNINGS';    parentQueueKey: string }
+  | { type: 'ADD_CONFLICT_WARNING';  warning: ConflictWarning }
+  | { type: 'CLEAR_CONFLICT_WARNINGS'; queueKey: string }
+  | { type: 'SET_DOWNLOADING';       value: boolean }
+  | { type: 'SET_ZIP_PROGRESS';      progress: number }
   | { type: 'CLEAR' }
-  | { type: 'RESTORE';          entries: QueueEntry[] };
+  | { type: 'RESTORE';               entries: QueueEntry[] };
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +133,9 @@ function reducer(state: QueueState, action: QueueAction): QueueState {
         ...state,
         entries: state.entries.filter(e => e.queueKey !== action.queueKey),
         dependencyWarnings: state.dependencyWarnings.filter(w => w.parentQueueKey !== action.queueKey),
+        conflictWarnings: state.conflictWarnings.filter(
+          w => w.queueKeyA !== action.queueKey && w.queueKeyB !== action.queueKey,
+        ),
       };
     case 'RESOLVE':
       return {
@@ -150,14 +163,23 @@ function reducer(state: QueueState, action: QueueAction): QueueState {
       return { ...state, dependencyWarnings: [...state.dependencyWarnings, action.warning] };
     case 'CLEAR_DEP_WARNINGS':
       return { ...state, dependencyWarnings: state.dependencyWarnings.filter(w => w.parentQueueKey !== action.parentQueueKey) };
+    case 'ADD_CONFLICT_WARNING':
+      return { ...state, conflictWarnings: [...state.conflictWarnings, action.warning] };
+    case 'CLEAR_CONFLICT_WARNINGS':
+      return {
+        ...state,
+        conflictWarnings: state.conflictWarnings.filter(
+          w => w.queueKeyA !== action.queueKey && w.queueKeyB !== action.queueKey,
+        ),
+      };
     case 'SET_DOWNLOADING':
       return { ...state, isDownloading: action.value, zipProgress: action.value ? 0 : state.zipProgress };
     case 'SET_ZIP_PROGRESS':
       return { ...state, zipProgress: action.progress };
     case 'CLEAR':
-      return { ...state, entries: [], dependencyWarnings: [], zipProgress: 0 };
+      return { ...state, entries: [], dependencyWarnings: [], conflictWarnings: [], zipProgress: 0 };
     case 'RESTORE':
-      return { ...state, entries: action.entries };
+      return { ...state, entries: action.entries, conflictWarnings: [] };
     default:
       return state;
   }
@@ -204,6 +226,7 @@ async function resolveEntry(
   entry:        QueueEntry,
   resolvingSet: Set<string>,
   dispatch:     Dispatch<QueueAction>,
+  getEntries:   () => QueueEntry[],
 ): Promise<void> {
   dispatch({ type: 'SET_STATUS', queueKey: entry.queueKey, status: 'resolving' });
   const service = getService(entry.filters);
@@ -217,7 +240,26 @@ async function resolveEntry(
     }
 
     dispatch({ type: 'RESOLVE', queueKey: entry.queueKey, version: result.version });
-    dispatch({ type: 'CLEAR_DEP_WARNINGS', parentQueueKey: entry.queueKey });
+    dispatch({ type: 'CLEAR_DEP_WARNINGS',     parentQueueKey: entry.queueKey });
+    dispatch({ type: 'CLEAR_CONFLICT_WARNINGS', queueKey:      entry.queueKey });
+
+    // Check for incompatible mods already in the queue.
+    const currentEntries = getEntries();
+    for (const dep of result.version.dependencies) {
+      if (dep.dependencyType !== 'incompatible') continue;
+      const conflicting = currentEntries.find(e => e.id === dep.projectId && !e.isDependency);
+      if (conflicting) {
+        dispatch({
+          type: 'ADD_CONFLICT_WARNING',
+          warning: {
+            queueKeyA: entry.queueKey,
+            titleA:    entry.title,
+            queueKeyB: conflicting.queueKey,
+            titleB:    conflicting.title,
+          },
+        });
+      }
+    }
 
     // Auto-add required dependencies; ADD reducer deduplicates.
     const required = result.version.dependencies.filter(d => d.dependencyType === 'required');
@@ -319,6 +361,7 @@ async function runDownloadGroups(
 export interface UseQueueReturn {
   entries:            QueueEntry[];
   dependencyWarnings: DependencyWarning[];
+  conflictWarnings:   ConflictWarning[];
   isDownloading:      boolean;
   zipProgress:        number;
   readyCount:         number;
@@ -331,7 +374,7 @@ export interface UseQueueReturn {
 
 export function useQueue(): UseQueueReturn {
   const [state, dispatch] = useReducer(reducer, {
-    entries: [], dependencyWarnings: [], isDownloading: false, zipProgress: 0,
+    entries: [], dependencyWarnings: [], conflictWarnings: [], isDownloading: false, zipProgress: 0,
   });
 
   // ── Restore from localStorage on mount ───────────────────────────────────
@@ -348,14 +391,16 @@ export function useQueue(): UseQueueReturn {
   // ── Auto-resolve pending entries ──────────────────────────────────────────
   // resolvingRef tracks in-flight keys so the effect never starts duplicate
   // resolution when entries change for unrelated reasons.
-  const resolvingRef = useRef(new Set<string>());
+  const resolvingRef  = useRef(new Set<string>());
+  const entriesRef    = useRef(state.entries);
+  entriesRef.current  = state.entries;
 
   useEffect(() => {
     for (const entry of state.entries) {
       if (entry.status !== 'pending') continue;
       if (resolvingRef.current.has(entry.queueKey)) continue;
       resolvingRef.current.add(entry.queueKey);
-      void resolveEntry(entry, resolvingRef.current, dispatch);
+      void resolveEntry(entry, resolvingRef.current, dispatch, () => entriesRef.current);
     }
   // We intentionally only depend on entries to react to new pending items.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -430,6 +475,7 @@ export function useQueue(): UseQueueReturn {
 
   return {
     entries: state.entries, dependencyWarnings: state.dependencyWarnings,
+    conflictWarnings: state.conflictWarnings,
     isDownloading: state.isDownloading, zipProgress: state.zipProgress,
     readyCount, add, remove, retry, clear, downloadZip,
   };

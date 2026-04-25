@@ -31,8 +31,11 @@ export const pt: typeof en = {
     addToQueue:  'Adicionar à fila',
     inQueue:     'Na fila',
     dep:         'dep',
-    retryTitle:  'Tentar novamente',
-    removeTitle: 'Remover',
+    retryTitle:    'Tentar novamente',
+    removeTitle:   'Remover',
+    conflictWith:  'Conflito com {title}',
+    conflictBanner: '{n} conflito detectado — baixar mesmo assim?',
+    conflictBannerPlural: '{n} conflitos detectados — baixar mesmo assim?',
   },
 
   errors: {
@@ -165,5 +168,15 @@ export const pt: typeof en = {
     text:   'No celular, Bedrock costuma funcionar melhor. Trocar agora?',
     keep:   'Manter',
     switch: 'Trocar',
+  },
+
+  minecraft: {
+    share:      'Minecraft',
+    shareTitle: 'Gerar código para instalar via mod',
+    prompt:     'Digite no Minecraft:',
+    command:    '/dynrinth {code}',
+    copied:     'Copiado!',
+    generating: 'Gerando...',
+    error:      'Erro ao gerar código',
   },
 };
