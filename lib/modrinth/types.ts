@@ -1,6 +1,6 @@
 // ─── Filter domain ────────────────────────────────────────────────────────────
 
-export type Source       = 'modrinth' | 'curseforge' | 'curseforge-bedrock';
+export type Source       = 'modrinth' | 'curseforge' | 'curseforge-bedrock' | 'pvprp' | 'optifine';
 export type Loader       = 'fabric' | 'forge';
 export type ShaderLoader = 'iris' | 'optifine';
 export type PluginLoader = 'bukkit' | 'spigot' | 'paper';

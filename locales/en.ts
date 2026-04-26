@@ -101,6 +101,8 @@ export const en = {
       modrinth:   'Modrinth',
       curseforge: 'CurseForge',
       bedrock:    'Bedrock',
+      pvprp:      'pvprp.com',
+      optifine:   'OptiFine',
     },
     contentTypes: {
       mod:            'Mods',

@@ -21,16 +21,16 @@ export const PLUGIN_LOADERS: { id: PluginLoader; label: string }[] = [
 ];
 
 export const CONTENT_TYPES: { id: ContentType; usesLoader: boolean; sources: Source[] }[] = [
-  { id: 'mod',          usesLoader: true,  sources: ['modrinth', 'curseforge']   },
-  { id: 'plugin',       usesLoader: false, sources: ['modrinth']                 },
-  { id: 'datapack',     usesLoader: false, sources: ['modrinth', 'curseforge']   },
-  { id: 'resourcepack', usesLoader: false, sources: ['modrinth', 'curseforge']   },
-  { id: 'shader',       usesLoader: false, sources: ['modrinth', 'curseforge']   },
-  { id: 'addon',        usesLoader: false, sources: ['curseforge-bedrock']       },
-  { id: 'map',          usesLoader: false, sources: ['curseforge-bedrock']       },
-  { id: 'texture-pack', usesLoader: false, sources: ['curseforge-bedrock']       },
-  { id: 'script',       usesLoader: false, sources: ['curseforge-bedrock']       },
-  { id: 'skin',         usesLoader: false, sources: ['curseforge-bedrock']       },
+  { id: 'mod',          usesLoader: true,  sources: ['modrinth', 'curseforge', 'optifine'] },
+  { id: 'plugin',       usesLoader: false, sources: ['modrinth']                           },
+  { id: 'datapack',     usesLoader: false, sources: ['modrinth', 'curseforge']             },
+  { id: 'resourcepack', usesLoader: false, sources: ['modrinth', 'curseforge', 'pvprp']   },
+  { id: 'shader',       usesLoader: false, sources: ['modrinth', 'curseforge']             },
+  { id: 'addon',        usesLoader: false, sources: ['curseforge-bedrock']                 },
+  { id: 'map',          usesLoader: false, sources: ['curseforge-bedrock']                 },
+  { id: 'texture-pack', usesLoader: false, sources: ['curseforge-bedrock']                 },
+  { id: 'script',       usesLoader: false, sources: ['curseforge-bedrock']                 },
+  { id: 'skin',         usesLoader: false, sources: ['curseforge-bedrock']                 },
 ];
 
 export const BEDROCK_CONTENT_TYPES = new Set<ContentType>([

@@ -2,6 +2,8 @@ import { useReducer, useEffect, useRef, useCallback } from 'react';
 import type { Dispatch } from 'react';
 import * as modrinthService   from '@/lib/modrinth/service';
 import * as curseforgeService from '@/lib/curseforge/service';
+import * as pvprpService      from '@/lib/scrapers/pvprp';
+import * as optifineService   from '@/lib/scrapers/optifine';
 import {
   DownloadDomainError,
   downloadAsZip,
@@ -13,7 +15,12 @@ import type { FailureReason, Filters, ResolvedVersion } from '@/lib/modrinth/typ
 import { trackDownload } from '@/lib/tracking';
 
 function getService(filters: Filters) {
-  return filters.source === 'modrinth' ? modrinthService : curseforgeService;
+  switch (filters.source) {
+    case 'modrinth':  return modrinthService;
+    case 'pvprp':     return pvprpService;
+    case 'optifine':  return optifineService;
+    default:          return curseforgeService;
+  }
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────

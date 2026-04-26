@@ -1,13 +1,20 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import * as modrinthService   from '@/lib/modrinth/service';
 import * as curseforgeService from '@/lib/curseforge/service';
+import * as pvprpService      from '@/lib/scrapers/pvprp';
+import * as optifineService   from '@/lib/scrapers/optifine';
 import type { Filters } from '@/lib/modrinth/types';
 import type { UseQueueReturn, QueueEntry } from './useQueue';
 import type { ModListState } from '@/lib/stateUtils';
 import { CURRENT_FORMAT_VERSION } from '@/lib/stateSchema';
 
 function getService(source: string) {
-  return source === 'modrinth' ? modrinthService : curseforgeService;
+  switch (source) {
+    case 'modrinth':  return modrinthService;
+    case 'pvprp':     return pvprpService;
+    case 'optifine':  return optifineService;
+    default:          return curseforgeService;
+  }
 }
 
 async function runCompatibilityCheck(

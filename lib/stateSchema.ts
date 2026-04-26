@@ -26,10 +26,10 @@ export type ModListState = ModListStateV2;
 export const CURRENT_FORMAT_VERSION = 2;
 
 const CONTENT_TYPE_COMPATIBILITY: Record<ContentType, Source[]> = {
-  mod:            ['modrinth', 'curseforge'],
+  mod:            ['modrinth', 'curseforge', 'optifine'],
   plugin:         ['modrinth'],
   datapack:       ['modrinth', 'curseforge'],
-  resourcepack:   ['modrinth', 'curseforge'],
+  resourcepack:   ['modrinth', 'curseforge', 'pvprp'],
   shader:         ['modrinth', 'curseforge'],
   addon:          ['curseforge-bedrock'],
   map:            ['curseforge-bedrock'],
@@ -39,6 +39,14 @@ const CONTENT_TYPE_COMPATIBILITY: Record<ContentType, Source[]> = {
 };
 
 // ─── Validation & migration ───────────────────────────────────────────────────
+
+const VALID_SOURCES = new Set<string>([
+  'modrinth', 'curseforge', 'curseforge-bedrock', 'pvprp', 'optifine',
+]);
+
+function isValidSource(v: unknown): v is Source {
+  return typeof v === 'string' && VALID_SOURCES.has(v);
+}
 
 export function migrate(raw: unknown): ModListState | null {
   return migrateWithDetails(raw).state;
@@ -74,7 +82,7 @@ export function migrateWithDetails(
     if (typeof obj.version !== 'string') return { state: null, error: 'v1 requires "version" as string' };
     if (typeof obj.loader  !== 'string') return { state: null, error: 'v1 requires "loader" as string' };
     if (typeof obj.source  !== 'string') return { state: null, error: 'v1 requires "source" as string' };
-    if (!(obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock')) {
+    if (!isValidSource(obj.source)) {
       return { state: null, error: `v1 has unsupported "source": ${String(obj.source)}` };
     }
     if (!Array.isArray(obj.mods)) return { state: null, error: 'v1 requires "mods" as string[]' };
@@ -93,7 +101,7 @@ export function migrateWithDetails(
     const contentType = obj.contentType;
     if (typeof obj.version     !== 'string') return { state: null, error: 'v2 requires "version" as string' };
     if (typeof obj.source      !== 'string') return { state: null, error: 'v2 requires "source" as string' };
-    if (!(obj.source === 'modrinth' || obj.source === 'curseforge' || obj.source === 'curseforge-bedrock')) {
+    if (!isValidSource(obj.source)) {
       return { state: null, error: `v2 has unsupported "source": ${String(obj.source)}` };
     }
     if (typeof contentType !== 'string') return { state: null, error: 'v2 requires "contentType" as string' };

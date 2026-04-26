@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import * as modrinthService   from '@/lib/modrinth/service';
 import * as curseforgeService from '@/lib/curseforge/service';
+import * as pvprpService      from '@/lib/scrapers/pvprp';
+import * as optifineService   from '@/lib/scrapers/optifine';
 import type { ContentType, Filters, Loader, PluginLoader, ShaderLoader, Source } from '@/lib/modrinth/types';
 import { captureEvent } from '@/lib/debugCapture';
 import { BEDROCK_CONTENT_TYPES, DEFAULT_FILTERS } from '@/lib/filterConfig';
@@ -58,9 +60,14 @@ export function useFilters(): UseFiltersReturn {
     let cancelled = false;
     setVersions([]);
     setFilters(prev => ({ ...prev, version: '' }));
-    const fetchVersions = filters.source === 'modrinth'
-      ? modrinthService.fetchGameVersions()
-      : curseforgeService.fetchGameVersions(filters.source);
+    const fetchVersions = (() => {
+      switch (filters.source) {
+        case 'modrinth':  return modrinthService.fetchGameVersions();
+        case 'pvprp':     return pvprpService.fetchGameVersions();
+        case 'optifine':  return optifineService.fetchGameVersions();
+        default:          return curseforgeService.fetchGameVersions(filters.source);
+      }
+    })();
     fetchVersions
       .then(releases => {
         if (cancelled) return;
@@ -104,7 +111,12 @@ export function useFilters(): UseFiltersReturn {
     setFilters(prev => {
       const toBedrockBoundary   = s === 'curseforge-bedrock' && !BEDROCK_CONTENT_TYPES.has(prev.contentType);
       const fromBedrockBoundary = s !== 'curseforge-bedrock' &&  BEDROCK_CONTENT_TYPES.has(prev.contentType);
-      const contentType = toBedrockBoundary ? 'addon' : fromBedrockBoundary ? 'mod' : prev.contentType;
+      const contentType =
+        s === 'pvprp'    && prev.contentType !== 'resourcepack' ? 'resourcepack' :
+        s === 'optifine' && prev.contentType !== 'mod'          ? 'mod' :
+        toBedrockBoundary   ? 'addon' :
+        fromBedrockBoundary ? 'mod' :
+        prev.contentType;
       if (s !== 'curseforge-bedrock' && prev.source !== 'curseforge-bedrock' && prev.version) {
         preservedVersionRef.current = prev.version;
       }

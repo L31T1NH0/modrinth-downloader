@@ -103,6 +103,8 @@ export const tr: typeof en = {
       modrinth:   'Modrinth',
       curseforge: 'CurseForge',
       bedrock:    'Bedrock',
+      pvprp:      'pvprp.com',
+      optifine:   'OptiFine',
     },
     contentTypes: {
       mod:            'Modlar',
