@@ -22,8 +22,21 @@ export async function generateMetadata(): Promise<Metadata> {
   const locale = detectLocaleFromLanguage((await headers()).get('accept-language'));
   const t = getTranslations(locale);
   return {
+    metadataBase: new URL('https://dynrinth.vercel.app'),
     title: 'Dynrinth',
     description: t.meta.homeDescription,
+    openGraph: {
+      title: 'Dynrinth',
+      description: t.meta.homeDescription,
+      url: 'https://dynrinth.vercel.app',
+      siteName: 'Dynrinth',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title: 'Dynrinth',
+      description: t.meta.homeDescription,
+    },
   };
 }
 
