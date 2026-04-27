@@ -27,7 +27,7 @@ import {
 } from '@/lib/filterConfig';
 import type { ContentType, Source, SortIndex } from '@/lib/modrinth/types';
 import {
-  buildShareUrl, downloadJSON, readStateFile, buildExportState, decodeState,
+  buildShareUrl, downloadJSON, readStateFile, buildExportStateMulti, decodeState,
   type ModListState,
 } from '@/lib/stateUtils';
 import { fmtCount as fmtDownloads } from '@/lib/format';
@@ -302,13 +302,60 @@ export default function Page() {
 
   // ── Export / Import / Share ───────────────────────────────────────────────
 
-  const getExportState = useCallback(() =>
-    buildExportState(
-      filters.version, filters.source, filters.contentType,
-      queue.entries.map(e => e.id),
-      { loader: filters.loader, shaderLoader: filters.shaderLoader, pluginLoader: filters.pluginLoader },
-    ),
-  [filters, queue.entries]);
+  const getExportState = useCallback(() => {
+    // Group entries by the contentType they had when added to the queue.
+    // This ensures mods go to mods/, resourcepacks to resourcepacks/, etc.
+    const groupMap = new Map<string, {
+      contentType: ContentType;
+      ids: string[];
+      loader: typeof filters.loader;
+      shaderLoader: typeof filters.shaderLoader;
+      pluginLoader: typeof filters.pluginLoader;
+    }>();
+
+    for (const entry of queue.entries) {
+      const ct = entry.filters.contentType;
+      const variant = ct === 'mod'
+        ? entry.filters.loader
+        : ct === 'shader'
+          ? (entry.filters.shaderLoader ?? 'iris')
+          : ct === 'plugin'
+            ? (entry.filters.pluginLoader ?? 'paper')
+            : 'default';
+      const key = `${ct}::${variant}`;
+
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          contentType:  ct,
+          ids: [],
+          loader:       entry.filters.loader,
+          shaderLoader: entry.filters.shaderLoader,
+          pluginLoader: entry.filters.pluginLoader,
+        });
+      }
+      groupMap.get(key)!.ids.push(entry.id);
+    }
+
+    const groups = Array.from(groupMap.values()).map(g => ({
+      contentType:   g.contentType,
+      loader:        g.loader,
+      shaderLoader:  g.shaderLoader ?? undefined,
+      pluginLoader:  g.pluginLoader ?? undefined,
+      mods:          g.ids,
+    }));
+
+    return buildExportStateMulti(
+      filters.version,
+      filters.source,
+      groups.length > 0 ? groups : [{
+        contentType:  filters.contentType,
+        loader:       filters.loader,
+        shaderLoader: filters.shaderLoader ?? undefined,
+        pluginLoader: filters.pluginLoader ?? undefined,
+        mods:         [],
+      }],
+    );
+  }, [filters, queue.entries]);
 
   const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

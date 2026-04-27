@@ -8,7 +8,7 @@ import {
 import { isModrinthIndex, fromModrinthIndex, readMrpackFile } from '@/lib/mrpack';
 
 // Re-export the canonical state type so callers don't need to know about stateSchema.
-export type { ModListState, ModListStateV2 } from '@/lib/stateSchema';
+export type { ModListState, ModListStateV2, ContentGroup } from '@/lib/stateSchema';
 
 const MAX_ENCODED_URL_LENGTH = 8000;
 
@@ -98,6 +98,65 @@ export function readStateFile(file: File): Promise<ModListState> {
 }
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
+
+/**
+ * Constructs a ModListState that supports mixed content types.
+ * When all entries share a single type, the output is identical to buildExportState (no `groups`).
+ * When entries span multiple types, adds a `groups` array so the mod can route each type correctly.
+ */
+export function buildExportStateMulti(
+  version: string,
+  source:  Source,
+  groups:  Array<{
+    contentType:   ContentType;
+    loader?:       Loader;
+    shaderLoader?: ShaderLoader | null;
+    pluginLoader?: PluginLoader | null;
+    mods:          string[];
+  }>,
+): ModListState {
+  const nonEmpty = groups.filter(g => g.mods.length > 0);
+
+  if (nonEmpty.length === 0) {
+    return buildExportState(version, source, 'mod', [], {});
+  }
+
+  if (nonEmpty.length === 1) {
+    const g = nonEmpty[0];
+    return buildExportState(version, source, g.contentType, g.mods, {
+      loader:       g.loader,
+      shaderLoader: g.shaderLoader ?? undefined,
+      pluginLoader: g.pluginLoader ?? undefined,
+    });
+  }
+
+  // Multiple groups: top-level fields mirror the first group for backward compat with old clients.
+  // New clients (mod v3.19+) read `groups` and route each type to its correct directory.
+  const first = nonEmpty[0];
+  const state: ModListState = {
+    formatVersion: CURRENT_FORMAT_VERSION,
+    version,
+    source,
+    contentType: first.contentType,
+    mods: first.mods,
+    groups: nonEmpty.map(g => {
+      const group: import('@/lib/stateSchema').ContentGroup = {
+        contentType: g.contentType,
+        mods: g.mods,
+      };
+      if (g.contentType === 'mod'    && g.loader)       group.loader       = g.loader;
+      if (g.contentType === 'shader' && g.shaderLoader) group.shaderLoader = g.shaderLoader;
+      if (g.contentType === 'plugin' && g.pluginLoader) group.pluginLoader = g.pluginLoader;
+      return group;
+    }),
+  };
+
+  if (first.contentType === 'mod')    state.loader       = first.loader ?? 'fabric';
+  if (first.contentType === 'shader') state.shaderLoader = first.shaderLoader ?? 'iris';
+  if (first.contentType === 'plugin') state.pluginLoader = first.pluginLoader ?? 'paper';
+
+  return state;
+}
 
 /** Constructs a ModListState from the current UI context. */
 export function buildExportState(

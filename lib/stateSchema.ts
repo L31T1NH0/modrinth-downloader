@@ -10,6 +10,14 @@ interface ModListStateV1 {
   mods:          string[];
 }
 
+export interface ContentGroup {
+  contentType:   ContentType;
+  loader?:       Loader;
+  shaderLoader?: ShaderLoader;
+  pluginLoader?: PluginLoader;
+  mods:          string[];
+}
+
 export interface ModListStateV2 {
   formatVersion: 2;
   version:       string;
@@ -19,6 +27,7 @@ export interface ModListStateV2 {
   shaderLoader?: ShaderLoader;
   pluginLoader?: PluginLoader;
   mods:          string[];
+  groups?:       ContentGroup[];
 }
 
 export type ModListState = ModListStateV2;
@@ -37,6 +46,64 @@ const CONTENT_TYPE_COMPATIBILITY: Record<ContentType, Source[]> = {
   script:         ['curseforge-bedrock'],
   skin:           ['curseforge-bedrock'],
 };
+
+const VALID_CONTENT_TYPES = new Set<ContentType>(Object.keys(CONTENT_TYPE_COMPATIBILITY) as ContentType[]);
+const VALID_LOADERS = new Set<Loader>(['fabric', 'forge', 'neoforge', 'quilt']);
+const VALID_PLUGIN_LOADERS = new Set<PluginLoader>(
+  ['bukkit', 'spigot', 'paper', 'purpur', 'folia', 'velocity', 'bungeecord', 'sponge'],
+);
+
+function normalizeGroups(groups: unknown, source: Source): { groups?: ContentGroup[]; error?: string } {
+  if (groups === undefined) return {};
+  if (!Array.isArray(groups)) return { error: 'v2 "groups" must be ContentGroup[] when present' };
+
+  const normalized: ContentGroup[] = [];
+
+  for (let i = 0; i < groups.length; i++) {
+    const rawGroup = groups[i];
+    if (typeof rawGroup !== 'object' || rawGroup === null) {
+      return { error: `v2 "groups"[${i}] must be an object` };
+    }
+
+    const group = rawGroup as Record<string, unknown>;
+    if (typeof group.contentType !== 'string' || !VALID_CONTENT_TYPES.has(group.contentType as ContentType)) {
+      return { error: `v2 "groups"[${i}] has unsupported "contentType": ${String(group.contentType)}` };
+    }
+
+    if (!Array.isArray(group.mods) || !(group.mods as unknown[]).every(mod => typeof mod === 'string')) {
+      return { error: `v2 "groups"[${i}] requires "mods" as string[]` };
+    }
+
+    const contentType = group.contentType as ContentType;
+    const allowedSources = CONTENT_TYPE_COMPATIBILITY[contentType];
+    if (!allowedSources.includes(source)) {
+      return {
+        error: `v2 "groups"[${i}] invalid combination: source="${source}" + contentType="${contentType}". Allowed: ${allowedSources.join(', ')}`,
+      };
+    }
+
+    const normalizedGroup: ContentGroup = {
+      contentType,
+      mods: group.mods as string[],
+    };
+
+    if (contentType === 'mod') {
+      normalizedGroup.loader = VALID_LOADERS.has(group.loader as Loader) ? group.loader as Loader : 'fabric';
+    }
+    if (contentType === 'shader') {
+      normalizedGroup.shaderLoader = group.shaderLoader === 'optifine' ? 'optifine' : 'iris';
+    }
+    if (contentType === 'plugin') {
+      normalizedGroup.pluginLoader = VALID_PLUGIN_LOADERS.has(group.pluginLoader as PluginLoader)
+        ? group.pluginLoader as PluginLoader
+        : 'paper';
+    }
+
+    normalized.push(normalizedGroup);
+  }
+
+  return normalized.length > 0 ? { groups: normalized } : {};
+}
 
 // ─── Validation & migration ───────────────────────────────────────────────────
 
@@ -97,7 +164,7 @@ export function migrateWithDetails(
       return { state: null, error: `v2 has unsupported "source": ${String(obj.source)}` };
     }
     if (typeof contentType !== 'string') return { state: null, error: 'v2 requires "contentType" as string' };
-    if (!['mod', 'plugin', 'datapack', 'resourcepack', 'shader', 'addon', 'map', 'texture-pack', 'script', 'skin'].includes(contentType)) {
+    if (!VALID_CONTENT_TYPES.has(contentType as ContentType)) {
       return { state: null, error: `v2 has unsupported "contentType": ${String(contentType)}` };
     }
     if (!Array.isArray(obj.mods)) return { state: null, error: 'v2 requires "mods" as string[]' };
@@ -140,17 +207,19 @@ export function migrateWithDetails(
       version: obj.version, source, contentType: normalizedContentType, mods: obj.mods as string[],
     };
 
+    const normalizedGroups = normalizeGroups(obj.groups, source);
+    if (normalizedGroups.error) return { state: null, error: normalizedGroups.error };
+    if (normalizedGroups.groups) base.groups = normalizedGroups.groups;
+
     if (normalizedContentType === 'mod') {
-      const validLoaders = new Set<Loader>(['fabric', 'forge', 'neoforge', 'quilt']);
-      const loader: Loader = validLoaders.has(obj.loader as Loader) ? obj.loader as Loader : 'fabric';
+      const loader: Loader = VALID_LOADERS.has(obj.loader as Loader) ? obj.loader as Loader : 'fabric';
       return { state: { ...base, loader } };
     }
     if (normalizedContentType === 'shader') {
       return { state: { ...base, shaderLoader: obj.shaderLoader === 'optifine' ? 'optifine' : 'iris' } };
     }
     if (normalizedContentType === 'plugin') {
-      const validPluginLoaders = new Set<PluginLoader>(['bukkit', 'spigot', 'paper', 'purpur', 'folia', 'velocity', 'bungeecord', 'sponge']);
-      const pluginLoader: PluginLoader = validPluginLoaders.has(obj.pluginLoader as PluginLoader) ? obj.pluginLoader as PluginLoader : 'paper';
+      const pluginLoader: PluginLoader = VALID_PLUGIN_LOADERS.has(obj.pluginLoader as PluginLoader) ? obj.pluginLoader as PluginLoader : 'paper';
       return { state: { ...base, pluginLoader } };
     }
     return { state: base };

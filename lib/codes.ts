@@ -79,10 +79,40 @@ function normalizeAuth(c: string): string {
   return c.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1');
 }
 
+function canonicalizeGroups(state: ModListState): Array<{
+  contentType: string;
+  loader: string | null;
+  shaderLoader: string | null;
+  pluginLoader: string | null;
+  mods: string[];
+}> | null {
+  if (!Array.isArray(state.groups) || state.groups.length === 0) return null;
+
+  const normalized = state.groups.map(group => {
+    const mods = Array.isArray(group.mods) ? [...group.mods].sort() : [];
+    return {
+      contentType:  group.contentType,
+      loader:       group.loader ?? null,
+      shaderLoader: group.shaderLoader ?? null,
+      pluginLoader: group.pluginLoader ?? null,
+      mods,
+    };
+  });
+
+  normalized.sort((a, b) => {
+    const aKey = `${a.contentType}|${a.loader ?? ''}|${a.shaderLoader ?? ''}|${a.pluginLoader ?? ''}|${a.mods.join(',')}`;
+    const bKey = `${b.contentType}|${b.loader ?? ''}|${b.shaderLoader ?? ''}|${b.pluginLoader ?? ''}|${b.mods.join(',')}`;
+    return aKey.localeCompare(bKey);
+  });
+
+  return normalized;
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export function generateCode(state: ModListState): string {
   // Hash excludes `version` — same mod list on different MC versions → same MAIN.
+  const canonicalGroups = canonicalizeGroups(state);
   const canonical = JSON.stringify({
     formatVersion: state.formatVersion,
     source:        state.source,
@@ -91,6 +121,7 @@ export function generateCode(state: ModListState): string {
     shaderLoader:  state.shaderLoader ?? null,
     pluginLoader:  state.pluginLoader ?? null,
     mods:          [...state.mods].sort(),
+    groups:        canonicalGroups,
   });
   const hash = createHash('sha256').update(canonical).digest();
 

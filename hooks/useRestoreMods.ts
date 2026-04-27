@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 import * as modrinthService   from '@/lib/modrinth/service';
 import * as curseforgeService from '@/lib/curseforge/service';
-import type { Filters, Loader } from '@/lib/modrinth/types';
+import type { Filters, Loader, PluginLoader, ShaderLoader } from '@/lib/modrinth/types';
 import type { UseQueueReturn } from './useQueue';
-import type { ModListState } from '@/lib/stateUtils';
+import type { ModListState, ContentGroup } from '@/lib/stateUtils';
 
 // ─── Concurrency helper ───────────────────────────────────────────────────────
 
@@ -45,6 +45,59 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+const VALID_MOD_LOADERS = new Set<Loader>(['fabric', 'forge', 'neoforge', 'quilt']);
+const VALID_SHADER_LOADERS = new Set<ShaderLoader>(['iris', 'optifine']);
+const VALID_PLUGIN_LOADERS = new Set<PluginLoader>(
+  ['bukkit', 'spigot', 'paper', 'purpur', 'folia', 'velocity', 'bungeecord', 'sponge'],
+);
+
+function normalizeModLoader(loader: unknown): Loader {
+  return VALID_MOD_LOADERS.has(loader as Loader) ? loader as Loader : 'fabric';
+}
+
+function normalizeShaderLoader(loader: unknown): ShaderLoader {
+  return VALID_SHADER_LOADERS.has(loader as ShaderLoader) ? loader as ShaderLoader : 'iris';
+}
+
+function normalizePluginLoader(loader: unknown): PluginLoader {
+  return VALID_PLUGIN_LOADERS.has(loader as PluginLoader) ? loader as PluginLoader : 'paper';
+}
+
+function buildGroupFilters(state: ModListState, group: ContentGroup): Filters {
+  const contentType = group.contentType;
+  return {
+    source:       state.source,
+    version:      state.version,
+    contentType,
+    loader:       normalizeModLoader(group.loader ?? state.loader),
+    shaderLoader: contentType === 'shader'
+      ? normalizeShaderLoader(group.shaderLoader ?? state.shaderLoader)
+      : null,
+    pluginLoader: contentType === 'plugin'
+      ? normalizePluginLoader(group.pluginLoader ?? group.loader ?? state.pluginLoader ?? state.loader)
+      : null,
+    sortIndex:  'relevance',
+    clientSide: false,
+    serverSide: false,
+  };
+}
+
+function normalizeGroups(state: ModListState): ContentGroup[] {
+  if (Array.isArray(state.groups) && state.groups.length > 0) {
+    return state.groups.filter(g => Array.isArray(g.mods) && g.mods.length > 0);
+  }
+  if (Array.isArray(state.mods) && state.mods.length > 0) {
+    return [{
+      contentType:   state.contentType,
+      loader:        state.loader,
+      shaderLoader:  state.shaderLoader,
+      pluginLoader:  state.pluginLoader,
+      mods:          state.mods,
+    }];
+  }
+  return [];
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export interface UseRestoreModsReturn {
@@ -66,19 +119,31 @@ export function useRestoreMods(
     if (inProgressRef.current) return;
     inProgressRef.current = true;
 
+    let totalItems = 0;
+
     try {
-      const loader: Loader = state.loader === 'forge' ? 'forge' : 'fabric';
-      const restoredFilters: Filters = {
+      const groups = normalizeGroups(state);
+      const groupsWithFilters = groups.map(group => ({
+        mods:    group.mods,
+        filters: buildGroupFilters(state, group),
+      }));
+
+      const restoredFilters: Filters = groupsWithFilters[0]?.filters ?? {
         source:       state.source,
         version:      state.version,
         contentType:  state.contentType,
-        loader,
-        shaderLoader: state.contentType === 'shader' ? (state.shaderLoader ?? 'iris') : null,
-        pluginLoader: state.contentType === 'plugin' ? (state.pluginLoader ?? 'paper') : null,
+        loader:       normalizeModLoader(state.loader),
+        shaderLoader: state.contentType === 'shader' ? normalizeShaderLoader(state.shaderLoader) : null,
+        pluginLoader: state.contentType === 'plugin' ? normalizePluginLoader(state.pluginLoader ?? state.loader) : null,
         sortIndex:    'relevance',
         clientSide:   false,
         serverSide:   false,
       };
+
+      const restoreItems = groupsWithFilters.flatMap(group =>
+        group.mods.map(id => ({ id, filters: group.filters })),
+      );
+      totalItems = restoreItems.length;
 
       // Apply filters and clear queue before starting async work so the UI
       // immediately reflects the new context even while metadata is loading.
@@ -87,22 +152,28 @@ export function useRestoreMods(
       setIsRestoring(true);
       setFailedCount(null);
 
-      const service = state.source === 'modrinth' ? modrinthService : curseforgeService;
+      if (restoreItems.length === 0) {
+        setFailedCount(0);
+        setIsRestoring(false);
+        return;
+      }
 
-      // Work exclusively from incoming state.mods — not from current queue entries,
-      // which were just cleared and could be stale under any concurrent scenario.
       const results = await mapWithConcurrency(
-        state.mods,
+        restoreItems,
         FETCH_CONCURRENCY,
-        id => service.fetchProjectInfo(id),
+        item => {
+          const service = item.filters.source === 'modrinth' ? modrinthService : curseforgeService;
+          return service.fetchProjectInfo(item.id);
+        },
       );
 
       let failed = 0;
       results.forEach((result, i) => {
+        const item = restoreItems[i];
         if (result.status === 'fulfilled') {
           const { title, iconUrl } = result.value;
-          // queue.add deduplicates by project ID — safe to call unconditionally
-          queue.add(state.mods[i], title, iconUrl, restoredFilters);
+          // queue.add deduplicates by canonical queue key (id + filter snapshot).
+          queue.add(item.id, title, iconUrl, item.filters);
         } else {
           failed++;
         }
@@ -112,7 +183,7 @@ export function useRestoreMods(
       setIsRestoring(false);
     } catch {
       setIsRestoring(false);
-      setFailedCount(prev => prev ?? state.mods.length);
+      setFailedCount(prev => prev ?? totalItems);
     } finally {
       inProgressRef.current = false;
     }
