@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { Outfit, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
@@ -17,6 +17,10 @@ const jbMono = JetBrains_Mono({
   variable: '--font-jb-mono',
   display: 'swap',
 });
+
+export const viewport: Viewport = {
+  viewportFit: 'cover',
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = detectLocaleFromLanguage((await headers()).get('accept-language'));

@@ -7,7 +7,7 @@ import {
   MagnifyingGlassIcon, PlusIcon, CheckIcon, CheckCircleIcon, XMarkIcon,
   ArrowUpTrayIcon, ArrowDownTrayIcon, LinkIcon, ArrowPathIcon,
   ExclamationTriangleIcon, InformationCircleIcon, ArchiveBoxIcon, CubeIcon,
-  TrophyIcon, ClipboardIcon, CommandLineIcon, ChevronDownIcon,
+  TrophyIcon, ClipboardIcon, CommandLineIcon, ChevronDownIcon, AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
 import { TextClamp } from '@/components/TextClamp';
 import { Wordmark } from '@/components/Wordmark';
@@ -236,6 +236,7 @@ export default function Page() {
 
   // ── Mobile panel ─────────────────────────────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<'search' | 'queue'>('search');
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // ── Snackbar ──────────────────────────────────────────────────────────────
   const [snackbar, setSnackbar] = useState<string | null>(null);
@@ -662,7 +663,8 @@ export default function Page() {
                 </a>
               </div>
             </div>
-            <div className="flex items-center gap-3 px-5 py-2 flex-wrap">
+            {/* Primary filters: always visible */}
+            <div className="flex items-center gap-2 px-5 py-2">
               <CustomSelect
                 value={filters.source}
                 onChange={v => setSource(v as Source)}
@@ -675,53 +677,71 @@ export default function Page() {
                 options={versions.length ? versions.map(v => ({ value: v, label: v })) : [{ value: '', label: '...' }]}
                 width="w-28"
               />
-              {currentTypeInfo.usesLoader && (
-                <PillToggle options={LOADERS} active={filters.loader} onToggle={setLoader} primaryCount={LOADER_PRIMARY_COUNT} />
-              )}
-              {filters.contentType === 'shader' && (
-                <PillToggle options={SHADER_LOADERS} active={filters.shaderLoader} onToggle={toggleShaderLoader} />
-              )}
-              {filters.contentType === 'plugin' && filters.source === 'modrinth' && (
-                <PillToggle options={PLUGIN_LOADERS} active={filters.pluginLoader} onToggle={togglePluginLoader} primaryCount={PLUGIN_LOADER_PRIMARY_COUNT} />
-              )}
-              <CustomSelect
-                value={filters.sortIndex}
-                onChange={v => setSortIndex(v as import('@/lib/modrinth/types').SortIndex)}
-                options={SORT_OPTIONS.map(s => ({ value: s.id, label: t.filters.sortOptions[s.id] }))}
-                width="w-28"
-              />
-              {filters.source === 'modrinth' && filters.contentType === 'mod' && (
-                <>
-                  <button
-                    onClick={toggleClientSide}
-                    className={[
-                      'h-7 px-3 rounded-md text-[11px] transition-all duration-150 font-medium',
-                      filters.clientSide
-                        ? 'bg-brand-glow border border-brand text-brand'
-                        : 'bg-bg-surface text-ink-secondary hover:text-ink-primary hover:bg-bg-hover',
-                    ].join(' ')}
-                  >
-                    {t.filters.clientSide}
-                  </button>
-                  <button
-                    onClick={toggleServerSide}
-                    className={[
-                      'h-7 px-3 rounded-md text-[11px] transition-all duration-150 font-medium',
-                      filters.serverSide
-                        ? 'bg-brand-glow border border-brand text-brand'
-                        : 'bg-bg-surface text-ink-secondary hover:text-ink-primary hover:bg-bg-hover',
-                    ].join(' ')}
-                  >
-                    {t.filters.serverSide}
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => setMobileFiltersOpen(v => !v)}
+                className={[
+                  'ml-auto h-7 w-7 rounded-md flex items-center justify-center transition-colors',
+                  mobileFiltersOpen
+                    ? 'bg-brand-glow border border-brand text-brand'
+                    : 'bg-bg-surface border border-line text-ink-secondary hover:text-ink-primary hover:bg-bg-hover',
+                ].join(' ')}
+                title={t.filters.filters}
+              >
+                <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
+              </button>
             </div>
+
+            {/* Secondary filters: collapsible */}
+            {mobileFiltersOpen && (
+              <div className="flex items-center gap-2 px-5 pb-2 flex-wrap animate-fadeIn">
+                {currentTypeInfo.usesLoader && (
+                  <PillToggle options={LOADERS} active={filters.loader} onToggle={setLoader} primaryCount={LOADER_PRIMARY_COUNT} />
+                )}
+                {filters.contentType === 'shader' && (
+                  <PillToggle options={SHADER_LOADERS} active={filters.shaderLoader} onToggle={toggleShaderLoader} />
+                )}
+                {filters.contentType === 'plugin' && filters.source === 'modrinth' && (
+                  <PillToggle options={PLUGIN_LOADERS} active={filters.pluginLoader} onToggle={togglePluginLoader} primaryCount={PLUGIN_LOADER_PRIMARY_COUNT} />
+                )}
+                <CustomSelect
+                  value={filters.sortIndex}
+                  onChange={v => setSortIndex(v as import('@/lib/modrinth/types').SortIndex)}
+                  options={SORT_OPTIONS.map(s => ({ value: s.id, label: t.filters.sortOptions[s.id] }))}
+                  width="w-28"
+                />
+                {filters.source === 'modrinth' && filters.contentType === 'mod' && (
+                  <>
+                    <button
+                      onClick={toggleClientSide}
+                      className={[
+                        'h-7 px-3 rounded-md text-[11px] transition-all duration-150 font-medium',
+                        filters.clientSide
+                          ? 'bg-brand-glow border border-brand text-brand'
+                          : 'bg-bg-surface text-ink-secondary hover:text-ink-primary hover:bg-bg-hover',
+                      ].join(' ')}
+                    >
+                      {t.filters.clientSide}
+                    </button>
+                    <button
+                      onClick={toggleServerSide}
+                      className={[
+                        'h-7 px-3 rounded-md text-[11px] transition-all duration-150 font-medium',
+                        filters.serverSide
+                          ? 'bg-brand-glow border border-brand text-brand'
+                          : 'bg-bg-surface text-ink-secondary hover:text-ink-primary hover:bg-bg-hover',
+                      ].join(' ')}
+                    >
+                      {t.filters.serverSide}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Search bar */}
           <div className="flex items-center gap-2 px-4 py-2 border-b border-line-subtle shrink-0 bg-bg-base flex-wrap">
-            <div className="flex gap-1 flex-1 min-w-0 max-w-sm">
+            <div className="flex gap-1 flex-1 min-w-0 md:max-w-sm">
               <div className="relative flex-1">
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-secondary" />
                 <input
@@ -899,7 +919,7 @@ export default function Page() {
                           }
                         }}
                         className={[
-                          'no-ring w-8 h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150 leading-none self-center',
+                          'no-ring w-10 h-10 md:w-8 md:h-8 rounded-lg text-xs flex items-center justify-center shrink-0 transition-all duration-150 leading-none self-center',
                           isActive
                             ? 'bg-bg-card text-ink-tertiary cursor-wait'
                             : queued && !justAdded
@@ -1047,11 +1067,18 @@ export default function Page() {
             )}
 
             {queueEntryCount === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-2 text-ink-tertiary">
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-ink-tertiary">
                 <ArchiveBoxIcon className="w-8 h-8 text-ink-secondary opacity-40" />
                 <span className="text-xs text-center leading-relaxed">
                   {t.queue.empty}<br />{t.queue.emptyHint}
                 </span>
+                <button
+                  onClick={() => setMobilePanel('search')}
+                  className="md:hidden h-8 px-4 rounded-lg bg-bg-surface border border-line text-ink-secondary text-xs font-medium flex items-center gap-1.5 hover:text-ink-primary hover:bg-bg-hover hover:border-line-strong transition-all"
+                >
+                  <MagnifyingGlassIcon className="w-3.5 h-3.5" />
+                  {t.nav.search}
+                </button>
               </div>
             ) : (
               renderedQueueEntries.map((entry, i) => {
@@ -1155,7 +1182,7 @@ export default function Page() {
                         {isError && (
                           <button
                             onClick={() => queue.retry(entry.queueKey)}
-                            className="text-ink-secondary hover:text-brand w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
+                            className="text-ink-secondary hover:text-brand w-8 h-8 md:w-5 md:h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
                             title={t.queue.retryTitle}
                           >
                             <ArrowPathIcon className="w-3.5 h-3.5" />
@@ -1163,7 +1190,7 @@ export default function Page() {
                         )}
                         <button
                           onClick={() => queue.remove(entry.queueKey)}
-                          className="text-ink-tertiary hover:text-ink-primary w-5 h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
+                          className="text-ink-tertiary hover:text-ink-primary w-8 h-8 md:w-5 md:h-5 flex items-center justify-center rounded hover:bg-bg-hover transition-colors"
                           title={t.queue.removeTitle}
                         >
                           <XMarkIcon className="w-3.5 h-3.5" />
@@ -1192,7 +1219,7 @@ export default function Page() {
               <button
                 onClick={() => downloadJSON(getExportState())}
                 disabled={isRestoring}
-                className="flex-1 h-8 rounded-lg bg-bg-surface text-ink-primary text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:text-white hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 h-10 md:h-8 rounded-lg bg-bg-surface text-ink-primary text-xs md:text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:text-white hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
                 title={t.footer.exportTitle}
               >
                 <ArrowUpTrayIcon className="w-[11px] h-[11px]" />
@@ -1201,7 +1228,7 @@ export default function Page() {
               <button
                 onClick={() => importInputRef.current?.click()}
                 disabled={isRestoring}
-                className="flex-1 h-8 rounded-lg bg-bg-surface text-ink-primary text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:text-white hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 h-10 md:h-8 rounded-lg bg-bg-surface text-ink-primary text-xs md:text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:text-white hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
                 title={t.footer.importTitle}
               >
                 {isRestoring ? (
@@ -1216,7 +1243,7 @@ export default function Page() {
               <button
                 onClick={handleShare}
                 disabled={isRestoring}
-                className="flex-1 h-8 rounded-lg bg-bg-surface text-ink-primary text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:text-white hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 h-10 md:h-8 rounded-lg bg-bg-surface text-ink-primary text-xs md:text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:text-white hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
                 title={t.footer.shareTitle}
               >
                 <LinkIcon className="w-[11px] h-[11px]" />
@@ -1416,7 +1443,7 @@ export default function Page() {
       )}
 
       {/* ── Mobile bottom nav ────────────────────────────────────────────── */}
-      <nav className="md:hidden shrink-0 flex border-t border-line-subtle bg-bg-base">
+      <nav className="md:hidden shrink-0 flex border-t border-line-subtle bg-bg-base pb-safe">
         <button
           onClick={() => setMobilePanel('search')}
           className={`flex-1 py-3.5 text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
@@ -1435,7 +1462,7 @@ export default function Page() {
           <ArrowDownTrayIcon className="w-[15px] h-[15px]" />
           {t.nav.queue}
           {queueEntryCount > 0 && (
-            <span className="min-w-[18px] h-[18px] px-1 bg-brand text-brand-dark text-[9px] font-bold rounded-full flex items-center justify-center font-mono">
+            <span key={queueEntryCount} className="min-w-[22px] h-[22px] px-1 bg-brand text-brand-dark text-[10px] font-bold rounded-full flex items-center justify-center font-mono animate-badgePop">
               {queueEntryCount}
             </span>
           )}

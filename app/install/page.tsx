@@ -102,7 +102,7 @@ export default async function ModPage() {
       <section className="relative flex flex-col items-center text-center px-6 pt-12 pb-10 gap-5 max-w-2xl mx-auto w-full min-h-[calc(100dvh-3rem)]">
         <div className="flex flex-col items-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/dynrinth-wordmark.svg" alt="Dynrinth" className="h-12 w-auto block translate-x-9 -mt-3 mb-6" />
+          <img src="/dynrinth-wordmark.svg" alt="Dynrinth" className="h-12 w-auto block sm:translate-x-9 -mt-3 mb-6" />
           <h1 className="text-[1.75rem] font-semibold tracking-tight leading-tight">
             {t.modPage.hero.titleLine1}<br />
             <span className="text-brand">{t.modPage.hero.titleLine2}</span>
@@ -201,7 +201,7 @@ export default async function ModPage() {
 
       {/* ── Callout ── */}
       <section className="flex flex-col items-center px-6 py-10 max-w-2xl mx-auto w-full">
-        <div className="w-full rounded-lg border border-brand/20 bg-brand-glow px-4 py-3.5 flex items-center justify-between gap-4">
+        <div className="w-full rounded-lg border border-brand/20 bg-brand-glow px-4 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div>
             <p className="text-[13px] font-medium">{t.modPage.callout.title}</p>
             <p className="text-[12px] text-ink-secondary mt-0.5">
