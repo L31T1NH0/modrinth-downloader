@@ -77,7 +77,7 @@ export default async function PackPage(
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3.5 sm:px-4 h-13 border-b border-line-subtle bg-bg-base/85 backdrop-blur-sm">
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <div className="flex items-center gap-3 sm:gap-2 min-w-0">
           <Link href="/" title="Back to Dynrinth" className="shrink-0 opacity-95 hover:opacity-100 transition-opacity">
             <Image src="/dynrinth-icon.svg" alt="Dynrinth" width={28} height={28} className="rounded-md border border-line-subtle" />
           </Link>
