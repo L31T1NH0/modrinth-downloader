@@ -149,6 +149,8 @@ export const en = {
     searchOnDynrinth: 'Search "{name}" on Dynrinth',
     viewOnPlatform:   'View on platform',
     tracking:         'Tracking downloads through Dynrinth',
+    onlineNow:        '{n} online now',
+    totalDownloads:   'Total downloaded',
   },
 
   importErrors: {

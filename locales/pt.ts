@@ -151,6 +151,8 @@ export const pt: typeof en = {
     searchOnDynrinth: 'Pesquisar "{name}" no Dynrinth',
     viewOnPlatform:   'Ver na plataforma',
     tracking:         'Downloads rastreados pelo Dynrinth',
+    onlineNow:        '{n} online agora',
+    totalDownloads:   'Total baixados',
   },
 
   importErrors: {

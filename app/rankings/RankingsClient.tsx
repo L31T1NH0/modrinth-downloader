@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQueue } from '@/hooks/useQueue';
@@ -83,11 +83,45 @@ export function RankingsClient({ rankings: initialRankings, total: initialTotal 
   const [total,       setTotal]       = useState(initialTotal);
   const [isFetching,  setIsFetching]  = useState(false);
   const [mounted,     setMounted]     = useState(false);
+  const [liveStats,   setLiveStats]   = useState<{ usersOnline: number | null; totalDownloads: number | null }>({ usersOnline: null, totalDownloads: null });
+  const sidRef = useRef<string | null>(null);
   const sourceOptions = [
     { value: 'modrinth', label: t.filters.sources.modrinth, icon: '/Modrinth_icon_light.webp' },
     { value: 'curseforge', label: t.filters.sources.curseforge, icon: '/curseforge.svg' },
   ] as const;
   const contentTypes = RANKING_CONTENT_TYPES.map(ct => ({ ...ct, label: contentTypeLabel(ct.id, t) }));
+
+  // Presence heartbeat + global stats
+  useEffect(() => {
+    try {
+      const existing = sessionStorage.getItem('dynrinth:sid');
+      sidRef.current = existing ?? (() => {
+        const id = crypto.randomUUID();
+        sessionStorage.setItem('dynrinth:sid', id);
+        return id;
+      })();
+    } catch {
+      sidRef.current = crypto.randomUUID();
+    }
+
+    async function tick() {
+      const sid = sidRef.current!;
+      const [, statsRes] = await Promise.allSettled([
+        fetch('/api/presence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sid }),
+        }).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/stats').then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
+      const stats = statsRes.status === 'fulfilled' ? statsRes.value : null;
+      if (stats) setLiveStats({ usersOnline: stats.usersOnline, totalDownloads: stats.totalDownloads });
+    }
+
+    void tick();
+    const timer = setInterval(() => void tick(), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // On mount: fetch version list
   useEffect(() => {
@@ -223,6 +257,21 @@ export function RankingsClient({ rankings: initialRankings, total: initialTotal 
                   <div>
                     <p className="text-mono text-[9px] text-ink-tertiary uppercase tracking-widest mb-0.5">{t.rankings.downloads}</p>
                     <p className="text-mono text-[11px] font-semibold text-brand">{fmtCount(totalDownloads)}</p>
+                  </div>
+                )}
+                {liveStats.usersOnline !== null && (
+                  <div>
+                    <p className="text-mono text-[9px] text-ink-tertiary uppercase tracking-widest mb-0.5">LIVE</p>
+                    <p className="text-mono text-[11px] font-semibold text-ink-primary flex items-center gap-1.5">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand animate-pulse shrink-0" />
+                      {t.rankings.onlineNow.replace('{n}', liveStats.usersOnline.toLocaleString())}
+                    </p>
+                  </div>
+                )}
+                {liveStats.totalDownloads !== null && (
+                  <div>
+                    <p className="text-mono text-[9px] text-ink-tertiary uppercase tracking-widest mb-0.5">{t.rankings.totalDownloads.toUpperCase()}</p>
+                    <p className="text-mono text-[11px] font-semibold text-ink-primary">{fmtCount(liveStats.totalDownloads)}</p>
                   </div>
                 )}
               </div>

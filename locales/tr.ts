@@ -151,6 +151,8 @@ export const tr: typeof en = {
     searchOnDynrinth: 'Dynrinth\'te "{name}" ara',
     viewOnPlatform:   'Platformda görüntüle',
     tracking:         'İndirmeler Dynrinth üzerinden izleniyor',
+    onlineNow:        'Şu an {n} çevrimiçi',
+    totalDownloads:   'Toplam indirilen',
   },
 
   importErrors: {

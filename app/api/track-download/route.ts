@@ -65,6 +65,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         'iconUrl', mod.iconUrl ?? '',
       ]);
     }
+    const validCount = mods.filter(m => m.id && m.source).length;
+    if (validCount > 0) commands.push(['INCRBY', 'downloads:total', String(validCount)]);
     if (commands.length > 0) {
       await kvPipeline(commands);
     }
