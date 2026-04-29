@@ -108,6 +108,10 @@ export interface UseRestoreModsReturn {
   processedCount: number;
   /** Total number of items to process */
   totalCount: number;
+  /** Whether restoration is paused waiting for rate limit */
+  isPaused: boolean;
+  /** Seconds remaining until restoration can continue */
+  pauseSecondsRemaining: number;
   restoreMods: (state: ModListState) => Promise<void>;
 }
 
@@ -119,7 +123,11 @@ export function useRestoreMods(
   const [failedCount, setFailedCount] = useState<number | null>(null);
   const [processedCount, setProcessedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const inProgressRef = useRef(false); // prevents overlapping restore calls
+  const [isPaused, setIsPaused] = useState(false);
+  const [pauseSecondsRemaining, setPauseSecondsRemaining] = useState(0);
+  const inProgressRef = useRef(false);
+  const pauseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const shouldPauseRef = useRef(false);
 
   const restoreMods = useCallback(async (state: ModListState) => {
     if (inProgressRef.current) return;
@@ -151,14 +159,15 @@ export function useRestoreMods(
       );
       totalItems = restoreItems.length;
 
-      // Apply filters and clear queue before starting async work so the UI
-      // immediately reflects the new context even while metadata is loading.
       setFilters(restoredFilters);
       queue.clear();
       setIsRestoring(true);
       setFailedCount(null);
       setTotalCount(totalItems);
       setProcessedCount(0);
+      setIsPaused(false);
+      setPauseSecondsRemaining(0);
+      shouldPauseRef.current = false;
 
       if (restoreItems.length === 0) {
         setFailedCount(0);
@@ -166,12 +175,26 @@ export function useRestoreMods(
         return;
       }
 
-      // Use smaller batches to show progress and avoid rate limits
       const BATCH_SIZE = 20;
+      const BATCH_LIMIT = 120;
+      const PAUSE_SECONDS = 60;
       let failed = 0;
       let processed = 0;
 
       for (let i = 0; i < restoreItems.length; i += BATCH_SIZE) {
+        if (shouldPauseRef.current) {
+          setIsPaused(true);
+          
+          for (let sec = PAUSE_SECONDS; sec > 0; sec--) {
+            setPauseSecondsRemaining(sec);
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          
+          setIsPaused(false);
+          setPauseSecondsRemaining(0);
+          shouldPauseRef.current = false;
+        }
+
         const batch = restoreItems.slice(i, i + BATCH_SIZE);
         const results = await mapWithConcurrency(
           batch,
@@ -195,8 +218,11 @@ export function useRestoreMods(
         processed += batch.length;
         setProcessedCount(processed);
 
-        // Rate limit delay between batches to avoid 429
-        if (i + BATCH_SIZE < restoreItems.length) {
+        if (processed >= BATCH_LIMIT && i + BATCH_SIZE < restoreItems.length) {
+          shouldPauseRef.current = true;
+        }
+
+        if (i + BATCH_SIZE < restoreItems.length && !shouldPauseRef.current) {
           await new Promise(r => setTimeout(r, 1500));
         }
       }
@@ -211,5 +237,5 @@ export function useRestoreMods(
     }
   }, [queue, setFilters]);
 
-  return { isRestoring, failedCount, processedCount, totalCount, restoreMods };
+  return { isRestoring, failedCount, processedCount, totalCount, isPaused, pauseSecondsRemaining, restoreMods };
 }

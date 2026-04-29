@@ -212,7 +212,7 @@ export default function Page() {
   const [separateByVersion,  setSeparateByVersion]  = useState<boolean | null>(null); // null = not decided
 
   const search = useSearch(filters, versions);
-  const { isRestoring, failedCount, processedCount, totalCount, restoreMods } = useRestoreMods(queue, setFilters);
+  const { isRestoring, failedCount, processedCount, totalCount, isPaused, pauseSecondsRemaining, restoreMods } = useRestoreMods(queue, setFilters);
   const { migration, check, confirm: confirmMigration, dismiss: dismissMigration } =
     useVersionMigration(filters, queue, restoreMods);
 
@@ -1206,6 +1206,11 @@ export default function Page() {
               >
                 {isRestoring ? (
                   <><Spinner size={11} /> {processedCount}/{totalCount}</>
+                ) : isPaused ? (
+                  <>
+                    <span className="w-2.5 h-2.5 border border-brand rounded-full border-t-transparent animate-spin" />
+                    {pauseSecondsRemaining}s
+                  </>
                 ) : (
                   <>
                     <ArrowDownTrayIcon className="w-[11px] h-[11px]" />
