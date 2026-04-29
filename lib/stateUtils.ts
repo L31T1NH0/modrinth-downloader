@@ -117,7 +117,7 @@ function parseCurseForgeLinkList(html: string, baseVersion: string, baseLoader: 
     const slug = match[1];
     if (!seen.has(slug)) {
       seen.add(slug);
-      mods.push(`curseforge/${slug}`);
+      mods.push(slug);
     }
   }
 
@@ -130,7 +130,7 @@ function parseCurseForgeLinkList(html: string, baseVersion: string, baseLoader: 
         const slug = parts[parts.length - 1];
         if (!seen.has(slug)) {
           seen.add(slug);
-          mods.push(`curseforge/${slug}`);
+          mods.push(slug);
         }
       }
     }

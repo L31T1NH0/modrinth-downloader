@@ -70,7 +70,7 @@ export function fromCurseForgeManifest(manifest: CurseForgeManifest): ModListSta
   const seen = new Set<string>();
   const mods: string[] = [];
   for (const file of manifest.files) {
-    const id = `curseforge/${file.projectID}/${file.fileID}`;
+    const id = String(file.projectID);
     if (!seen.has(id)) {
       seen.add(id);
       mods.push(id);
