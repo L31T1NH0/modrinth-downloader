@@ -51,7 +51,7 @@ export const en = {
     export:             'Export',
     exportTitle:        'Export mod list as JSON',
     import:             'Import',
-    importTitle:        'Import mod list from JSON or .mrpack',
+    importTitle:        'Import mod list from JSON, .mrpack, or CurseForge modpack',
     restoring:          'Restoring...',
     share:              'Share',
     shareTitle:         'Copy shareable URL',

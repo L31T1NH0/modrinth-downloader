@@ -104,6 +104,10 @@ export interface UseRestoreModsReturn {
   isRestoring: boolean;
   /** null = no restore attempted yet; 0 = all succeeded; >0 = partial failure */
   failedCount: number | null;
+  /** Number of items processed so far (including pending in current batch) */
+  processedCount: number;
+  /** Total number of items to process */
+  totalCount: number;
   restoreMods: (state: ModListState) => Promise<void>;
 }
 
@@ -113,6 +117,8 @@ export function useRestoreMods(
 ): UseRestoreModsReturn {
   const [isRestoring, setIsRestoring] = useState(false);
   const [failedCount, setFailedCount] = useState<number | null>(null);
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const inProgressRef = useRef(false); // prevents overlapping restore calls
 
   const restoreMods = useCallback(async (state: ModListState) => {
@@ -151,6 +157,8 @@ export function useRestoreMods(
       queue.clear();
       setIsRestoring(true);
       setFailedCount(null);
+      setTotalCount(totalItems);
+      setProcessedCount(0);
 
       if (restoreItems.length === 0) {
         setFailedCount(0);
@@ -158,26 +166,40 @@ export function useRestoreMods(
         return;
       }
 
-      const results = await mapWithConcurrency(
-        restoreItems,
-        FETCH_CONCURRENCY,
-        item => {
-          const service = item.filters.source === 'modrinth' ? modrinthService : curseforgeService;
-          return service.fetchProjectInfo(item.id);
-        },
-      );
-
+      // Use smaller batches to show progress and avoid rate limits
+      const BATCH_SIZE = 20;
       let failed = 0;
-      results.forEach((result, i) => {
-        const item = restoreItems[i];
-        if (result.status === 'fulfilled') {
-          const { title, iconUrl } = result.value;
-          // queue.add deduplicates by canonical queue key (id + filter snapshot).
-          queue.add(item.id, title, iconUrl, item.filters);
-        } else {
-          failed++;
+      let processed = 0;
+
+      for (let i = 0; i < restoreItems.length; i += BATCH_SIZE) {
+        const batch = restoreItems.slice(i, i + BATCH_SIZE);
+        const results = await mapWithConcurrency(
+          batch,
+          FETCH_CONCURRENCY,
+          item => {
+            const service = item.filters.source === 'modrinth' ? modrinthService : curseforgeService;
+            return service.fetchProjectInfo(item.id);
+          },
+        );
+
+        results.forEach((result, idx) => {
+          const item = batch[idx];
+          if (result.status === 'fulfilled') {
+            const { title, iconUrl } = result.value;
+            queue.add(item.id, title, iconUrl, item.filters);
+          } else {
+            failed++;
+          }
+        });
+
+        processed += batch.length;
+        setProcessedCount(processed);
+
+        // Rate limit delay between batches to avoid 429
+        if (i + BATCH_SIZE < restoreItems.length) {
+          await new Promise(r => setTimeout(r, 1500));
         }
-      });
+      }
 
       setFailedCount(failed);
       setIsRestoring(false);
@@ -189,5 +211,5 @@ export function useRestoreMods(
     }
   }, [queue, setFilters]);
 
-  return { isRestoring, failedCount, restoreMods };
+  return { isRestoring, failedCount, processedCount, totalCount, restoreMods };
 }

@@ -212,7 +212,7 @@ export default function Page() {
   const [separateByVersion,  setSeparateByVersion]  = useState<boolean | null>(null); // null = not decided
 
   const search = useSearch(filters, versions);
-  const { isRestoring, failedCount, restoreMods } = useRestoreMods(queue, setFilters);
+  const { isRestoring, failedCount, processedCount, totalCount, restoreMods } = useRestoreMods(queue, setFilters);
   const { migration, check, confirm: confirmMigration, dismiss: dismissMigration } =
     useVersionMigration(filters, queue, restoreMods);
 
@@ -1205,7 +1205,7 @@ export default function Page() {
                 title={t.footer.importTitle}
               >
                 {isRestoring ? (
-                  <><Spinner size={11} /> {t.footer.restoring}</>
+                  <><Spinner size={11} /> {processedCount}/{totalCount}</>
                 ) : (
                   <>
                     <ArrowDownTrayIcon className="w-[11px] h-[11px]" />
