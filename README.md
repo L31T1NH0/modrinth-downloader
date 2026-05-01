@@ -108,7 +108,7 @@ Aplicacao local: `http://localhost:3000`
 ## API Interna
 
 - `GET /api/curseforge`: proxy com allowlist de endpoints e query params do CurseForge.
-- `GET /api/curseforge/download`: redirect validado para downloads do CurseForge.
+- `GET /api/curseforge/download`: proxy/stream validado para downloads do CurseForge.
 - `POST /api/codes`: valida o estado da lista e retorna um codigo curto; com KV configurado, persiste o estado para recuperacao posterior.
 - `GET /api/codes/[code]`: recupera uma lista salva a partir do codigo quando o backend KV esta disponivel.
 - `POST /api/track-download`: incrementa contadores usados no ranking quando o backend KV esta disponivel.
@@ -134,10 +134,12 @@ Se nenhum header confiavel estiver presente, o valor usado e `unknown`.
 
 ### Download Proxy Do CurseForge
 
-`/api/curseforge/download` aceita apenas hosts permitidos:
+`/api/curseforge/download` aceita apenas hosts permitidos e faz o stream do arquivo pelo proprio backend:
 
 - `edge.forgecdn.net`
 - `mediafilez.forgecdn.net`
+- `media.forgecdn.net`
+- `cdn.forgecdn.net`
 
 ## Estrutura Do Projeto
 
